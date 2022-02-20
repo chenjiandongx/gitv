@@ -1,8 +1,12 @@
 use anyhow::{Error, Result};
+use async_trait::async_trait;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
+use std::sync;
+use std::sync::Arc;
+use async_process::Command;
+use serde::{Deserialize};
 
 lazy_static! {
     static ref COMMIT_INFO_REGEXP: regex::Regex =
@@ -194,52 +198,37 @@ impl TryFrom<&[String]> for FileExtStats {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct Repository {
     pub name: String,
-    pub branches: Vec<String>,
+    pub branches: Option<Vec<String>>,
     pub remote: String,
     pub path: String,
 }
 
-impl Repository {
-    pub fn new<S>(name: S, remote: S, path: S, branches: Vec<String>) -> Self
-    where
-        S: Into<String>,
-    {
-        Self {
-            name: name.into(),
-            remote: remote.into(),
-            path: path.into(),
-            branches,
-        }
-    }
+#[async_trait]
+pub trait GitImpl: Send + Sync {
+    async fn clone(&self, repo: &Repository) -> Result<()>;
+    async fn commits(&self, repo: &Repository) -> Result<Vec<Commit>>;
+    async fn tags(&self, repo: &Repository) -> Result<Vec<TagStats>>;
+    async fn current_branch(&self, repo: &Repository) -> Result<String>;
 }
 
-pub trait GitImpl {
-    fn commits(&self) -> Result<Vec<Commit>>;
-    fn tags(&self) -> Result<Vec<TagStats>>;
-    fn current_branch(&self) -> Result<String>;
-}
+pub struct GitBinary;
 
-pub struct GitBinary<'a> {
-    pub repo: &'a Repository,
-}
+impl GitBinary {
+    async fn sub_command(&self, repo: &Repository, command: &str, args: &[&str], delimiter: char) -> Result<Vec<String>> {
+        let mut args = args.to_vec();
+        args.insert(0, command);
 
-impl<'a> GitBinary<'a> {
-    pub fn new(repo: &'a Repository) -> Self {
-        Self { repo }
-    }
-
-    fn git(&self, args: &[&str], delimiter: char) -> Result<Vec<String>> {
         let mut c = Command::new("git");
         c.args(&[
-            format!("--git-dir={}/.git", self.repo.path),
-            format!("--work-tree={}", self.repo.path),
+            format!("--git-dir={}/.git", repo.path),
+            format!("--work-tree={}", repo.path),
         ]);
         c.args(args);
 
-        let out = c.output()?.stdout;
+        let out = c.output().await?.stdout;
         let lines = String::from_utf8(out)?
             .split(delimiter)
             .filter(|x| !x.is_empty())
@@ -249,44 +238,49 @@ impl<'a> GitBinary<'a> {
         Ok(lines)
     }
 
-    fn sub_command(&self, command: &str, args: &[&str], delimiter: char) -> Result<Vec<String>> {
-        let mut args = args.to_vec();
-        args.insert(0, command);
-        self.git(args.as_slice(), delimiter)
+    async fn git_branch(&self, repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        self.sub_command(repo, "branch", args, '\n').await
     }
 
-    fn git_branch(&self, args: &[&str]) -> Result<Vec<String>> {
-        self.sub_command("branch", args, '\n')
+    async fn git_log(&self, repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        self.sub_command(repo, "log", args, '\n').await
     }
 
-    fn git_log(&self, args: &[&str]) -> Result<Vec<String>> {
-        self.sub_command("log", args, '\n')
+    async fn git_show_ref(&self, repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        self.sub_command(repo, "show-ref", args, '\n').await
     }
 
-    fn git_show_ref(&self, args: &[&str]) -> Result<Vec<String>> {
-        self.sub_command("show-ref", args, '\n')
+    async fn git_ls_tree(&self, repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        self.sub_command(repo, "ls-tree", args, '\u{0}').await
     }
 
-    fn git_ls_tree(&self, args: &[&str]) -> Result<Vec<String>> {
-        self.sub_command("ls-tree", args, '\u{0}')
+    async fn git_clone(&self, repo: &Repository) -> Result<()> {
+        let mut c = Command::new("git");
+        c.args(&["clone", repo.remote.as_str(), repo.path.as_str()]);
+        c.output().await?;
+        Ok(())
     }
-
-    fn git_pull(&self) {}
-    fn git_clone(&self) {}
 }
 
-impl<'a> GitImpl for GitBinary<'a> {
+struct GitBinaryImpl;
+
+#[async_trait]
+impl<'a> GitImpl for GitBinary {
+    async fn clone(&self, repo: &Repository) -> Result<()> {
+        self.git_clone(repo).await
+    }
+
     // TODO(optimize): 按时间切割 并发执行
     // https://stackoverflow.com/questions/11856983/why-git-authordate-is-different-from-commitdate
     // https://stackoverflow.com/questions/37311494/how-to-get-git-to-show-commits-in-a-specified-date-range-for-author-date
-    fn commits(&self) -> Result<Vec<Commit>> {
-        let lines = self.git_log(&[
+    async fn commits(&self, repo: &Repository) -> Result<Vec<Commit>> {
+        let lines = self.git_log(repo, &[
             "--no-merges",
             "--date=raw",
             "--pretty=format:<%ad> <%H> <%aN> <%aE>",
             "--numstat",
             "HEAD",
-        ])?;
+        ]).await?;
 
         let mut indexes = vec![];
         for (idx, line) in lines.iter().enumerate() {
@@ -300,7 +294,7 @@ impl<'a> GitImpl for GitBinary<'a> {
         for i in 1..indexes.len() {
             let (l, r) = (indexes[i - 1], indexes[i]);
             if let Ok(mut commit) = Commit::try_from(&lines[l..r]) {
-                commit.repo = self.repo.name.to_string();
+                commit.repo = repo.name.to_string();
                 commits.push(commit);
             }
         }
@@ -309,50 +303,55 @@ impl<'a> GitImpl for GitBinary<'a> {
     }
 
     // TODO(optimize): 并发执行
-    fn tags(&self) -> Result<Vec<TagStats>> {
-        let lines = self.git_show_ref(&["--tags"])?;
-
-        let mut stats = vec![];
+    async fn tags(&self, repo: &Repository) -> Result<Vec<TagStats>> {
+        let lines = self.git_show_ref(repo, &["--tags"]).await?;
+        let r: Vec<TagStats> = vec![];
+        let mut mutex = Arc::new(tokio::sync::Mutex::new(r));
         for line in lines {
             let fields: Vec<&str> = line.splitn(2, ' ').collect();
             if fields.len() < 2 {
                 continue;
             }
 
-            let (hash, tag) = (fields[0], &fields[1]["refs/tags/".len()..]);
-            let lines = self.git_ls_tree(&["-r", "-l", "-z", hash])?;
-            let file_ext_stats = FileExtStats::try_from(lines.as_slice())?;
+            let lock = mutex.clone();
+            tokio::spawn(async move {
+                let (hash, tag) = (fields[0], &fields[1]["refs/tags/".len()..]);
+                let lines = self.git_ls_tree(repo, &["-r", "-l", "-z", hash]).await.unwrap();
+                let file_ext_stats = FileExtStats::try_from(lines.as_slice()).unwrap();
 
-            let log = self.git_log(&[
-                "--date=raw",
-                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                "--numstat",
-                hash,
-                "-1",
-            ])?;
+                let log = self.git_log(repo, &[
+                    "--date=raw",
+                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                    "--numstat",
+                    hash,
+                    "-1",
+                ]).await.unwrap();
 
-            let mut tag_stat = TagStats {
-                stats: file_ext_stats,
-                ..Default::default()
-            };
-            if let Ok(commit) = Commit::try_from(&log[..]) {
-                tag_stat.tag = tag.to_string();
-                tag_stat.hash = hash.to_string();
-                tag_stat.timestamp = commit.timestamp;
-                tag_stat.timezone = commit.timezone;
-            }
-            stats.push(tag_stat);
+                let mut tag_stat = TagStats {
+                    stats: file_ext_stats,
+                    ..Default::default()
+                };
+                if let Ok(commit) = Commit::try_from(&log[..]) {
+                    tag_stat.tag = tag.to_string();
+                    tag_stat.hash = hash.to_string();
+                    tag_stat.timestamp = commit.timestamp;
+                    tag_stat.timezone = commit.timezone;
+                }
+                let mut stats = lock.lock().await;
+                // let mut stats = lock.lock().await;
+                // let mut stats = stats.unwrap();
+                stats.push(tag_stat);
+            });
         }
-
-        Ok(stats)
+        Ok(vec![])
     }
 
-    fn current_branch(&self) -> Result<String> {
-        let lines = self.git_branch(&["--show-current"])?;
-        let branch = if lines.len() > 0 {
+    async fn current_branch(&self, repo: &Repository) -> Result<String> {
+        let lines = self.git_branch(repo, &["--show-current"]).await?;
+        let branch = if !lines.is_empty() {
             Ok(lines.first().unwrap().clone())
         } else {
-            Err(Error::msg("unknown branch"))
+            Err(Error::msg("unknown curren branch"))
         };
 
         branch

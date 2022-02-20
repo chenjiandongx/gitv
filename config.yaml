@@ -1,0 +1,17 @@
+author_mappings:
+  - source: "dongdongx,chenjiandongx@qq.com"
+    destination: "chenjiandongx,chenjiandongx@qq.com"
+  - source: "陈键冬,chenjiandongx@qq.com"
+    destination: "chenjiandongx,chenjiandongx@qq.com"
+
+databases:
+  - name: "chenjiandongx"
+    directory: "./data"
+    mode: "clone"
+    repositories:
+      - name: "pyecharts/pyecharts"
+        remote: "https://github.com/pyecharts/pyecharts.git"
+        path: "/Users/chenjiandongx/project/python/pyecharts"
+      - name: "cutecharts/cutecharts"
+        remote: "https://github.com/cutecharts/cutecharts.git"
+        path: "/Users/chenjiandongx/project/python/cutecharts"

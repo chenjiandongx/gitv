@@ -1,11 +1,12 @@
 use std::borrow::Borrow;
-pub use crate::gitimpl::*;
+pub use crate::gitbinary::*;
 
 use std::fs::File;
-use std::sync::Arc;
+
 use anyhow::Result;
 use serde::Serialize;
 use async_trait::async_trait;
+use crate::gitimpl::{GitImpl, Repository};
 
 static RECORD_COMMIT: &str = "COMMIT";
 static RECORD_CHANGE: &str = "CHANGE";
@@ -31,16 +32,16 @@ struct Record {
 
 #[async_trait]
 pub trait RecordSerializer {
-    async fn serialize(&self, path: String, database: String, repos: Vec<Repository>) -> Result<()>;
+    async fn serialize(&self, path: String, database: String, repos: &Vec<Repository>) -> Result<()>;
 }
 
 pub struct CsvSerializer {
-    pub git: Arc<dyn GitImpl>,
+    pub git: Box<dyn GitImpl>,
 }
 
 #[async_trait]
 impl<'a> RecordSerializer for CsvSerializer {
-    async fn serialize(&self, path: String, database: String, repos: Vec<Repository>) -> Result<()> {
+    async fn serialize(&self, path: String, database: String, repos: &Vec<Repository>) -> Result<()> {
         // TODO(optimize): 判断文件是否存在
         let file = File::create(format!("{}/{}.csv", path, database))?;
         let mut wtr = csv::Writer::from_writer(file);
@@ -65,30 +66,30 @@ impl<'a> RecordSerializer for CsvSerializer {
                     wtr.serialize(commit_record)?;
 
                     for fc in commit.changes {
-                        let mut r = common_record.clone();
-                        r.metric = RECORD_CHANGE.to_string();
-                        r.ext = fc.ext;
-                        r.insertion = fc.insertion;
-                        r.deletion = fc.deletion;
-                        wtr.serialize(r)?;
+                        let mut record = common_record.clone();
+                        record.metric = RECORD_CHANGE.to_string();
+                        record.ext = fc.ext;
+                        record.insertion = fc.insertion;
+                        record.deletion = fc.deletion;
+                        wtr.serialize(record)?;
                     }
                 }
             }
 
-            // let tag_stats = self.git.tags(repo.borrow()).await;
-            // if let Ok(tag_stats) = tag_stats {
-            //     for tag_stat in tag_stats {
-            //         let record = Record {
-            //             metric: RECORD_TAG.to_string(),
-            //             repo_name: repo.name.clone(),
-            //             timestamp: tag_stat.timestamp,
-            //             timezone: tag_stat.timezone,
-            //             tag: tag_stat.tag,
-            //             ..Default::default()
-            //         };
-            //         wtr.serialize(record)?;
-            //     }
-            // }
+            let tag_stats = self.git.tags(repo).await;
+            if let Ok(tag_stats) = tag_stats {
+                for tag_stat in tag_stats {
+                    let record = Record {
+                        metric: RECORD_TAG.to_string(),
+                        repo_name: repo.name.clone(),
+                        timestamp: tag_stat.timestamp,
+                        timezone: tag_stat.timezone,
+                        tag: tag_stat.tag,
+                        ..Default::default()
+                    };
+                    wtr.serialize(record)?;
+                }
+            }
         }
 
         // TODO(Optimize): 分批写入 避免内存过渡增长

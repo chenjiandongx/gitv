@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 use async_process::Command;
+use itertools::Itertools;
 use crate::gitimpl::*;
 
 lazy_static! {
@@ -237,10 +238,10 @@ impl GitImpl for GitBinaryImpl {
     }
 
     async fn tags(&self, repo: &Repository) -> Result<Vec<TagStats>> {
-        let start = Instant::now();
         let stats: Vec<TagStats> = vec![];
         let mutex = Arc::new(tokio::sync::Mutex::new(stats));
         let lines = git_show_ref(repo, &["--tags"]).await?;
+        let mut handles = vec![];
         for line in lines {
             let fields: Vec<String> = line.splitn(2, ' ').map(|x| x.to_string()).collect();
             if fields.len() < 2 {
@@ -248,8 +249,7 @@ impl GitImpl for GitBinaryImpl {
             }
             let lock = mutex.clone();
             let repo = repo.clone();
-            tokio::spawn(async move {
-                let _repo1 = repo.clone();
+            let handle = tokio::spawn(async move {
                 let (hash, tag) = (&fields[0], &fields[1]["refs/tags/".len()..]);
                 let lines = git_ls_tree(&repo, &["-r", "-l", "-z", hash]).await.unwrap();
                 let file_ext_stats = FileExtStats::try_from(lines.as_slice()).unwrap();
@@ -275,11 +275,11 @@ impl GitImpl for GitBinaryImpl {
                 let mut data = lock.lock().await;
                 data.push(tag_stat);
             });
+            handles.push(handle)
         }
+        futures::future::join_all(handles).await;
 
         let s = mutex.lock().await;
-        let duration = start.elapsed();
-        println!("Time elapsed is: {:?}", duration);
         Ok(s.to_vec())
     }
 

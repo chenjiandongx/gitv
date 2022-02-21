@@ -2,6 +2,8 @@ use std::borrow::Borrow;
 pub use crate::gitbinary::*;
 
 use std::fs::File;
+use std::time;
+use std::time::Instant;
 
 use anyhow::Result;
 use serde::Serialize;
@@ -32,7 +34,7 @@ struct Record {
 
 #[async_trait]
 pub trait RecordSerializer {
-    async fn serialize(&self, path: String, database: String, repos: &Vec<Repository>) -> Result<()>;
+    async fn serialize(&self, path: String, database: String, repos: &[Repository]) -> Result<()>;
 }
 
 pub struct CsvSerializer {
@@ -41,8 +43,8 @@ pub struct CsvSerializer {
 
 #[async_trait]
 impl<'a> RecordSerializer for CsvSerializer {
-    async fn serialize(&self, path: String, database: String, repos: &Vec<Repository>) -> Result<()> {
-        // TODO(optimize): 判断文件是否存在
+    async fn serialize(&self, path: String, database: String, repos: &[Repository]) -> Result<()> {
+        // TODO(optimize): 判断文件是否存在 或者有多种文件创建模式可选？
         let file = File::create(format!("{}/{}.csv", path, database))?;
         let mut wtr = csv::Writer::from_writer(file);
 
@@ -75,6 +77,7 @@ impl<'a> RecordSerializer for CsvSerializer {
                     }
                 }
             }
+            wtr.flush()?;
 
             let tag_stats = self.git.tags(repo).await;
             if let Ok(tag_stats) = tag_stats {
@@ -90,10 +93,9 @@ impl<'a> RecordSerializer for CsvSerializer {
                     wtr.serialize(record)?;
                 }
             }
+            wtr.flush()?;
         }
 
-        // TODO(Optimize): 分批写入 避免内存过渡增长
-        wtr.flush()?;
         Ok(())
     }
 }

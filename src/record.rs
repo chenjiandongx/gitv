@@ -1,14 +1,8 @@
-use std::borrow::Borrow;
-pub use crate::gitbinary::*;
-
-use std::fs::File;
-use std::time;
-use std::time::Instant;
-
-use anyhow::Result;
-use serde::Serialize;
-use async_trait::async_trait;
 use crate::gitimpl::{GitImpl, Repository};
+use anyhow::Result;
+use async_trait::async_trait;
+use serde::Serialize;
+use std::fs::File;
 
 static RECORD_COMMIT: &str = "COMMIT";
 static RECORD_CHANGE: &str = "CHANGE";
@@ -19,8 +13,7 @@ struct Record {
     metric: String,
     hash: String,
     repo_name: String,
-    timestamp: i64,
-    timezone: String,
+    datetime: String,
     author_name: String,
     author_email: String,
     author_domain: String,
@@ -54,9 +47,8 @@ impl<'a> RecordSerializer for CsvSerializer {
                 for commit in commits {
                     let common_record = Record {
                         repo_name: repo.name.clone(),
-                        timestamp: commit.timestamp,
+                        datetime: commit.datetime,
                         hash: commit.hash,
-                        timezone: commit.timezone,
                         author_name: commit.author.name,
                         author_email: commit.author.email,
                         author_domain: commit.author.domain,
@@ -85,8 +77,7 @@ impl<'a> RecordSerializer for CsvSerializer {
                     let record = Record {
                         metric: RECORD_TAG.to_string(),
                         repo_name: repo.name.clone(),
-                        timestamp: tag_stat.timestamp,
-                        timezone: tag_stat.timezone,
+                        datetime: tag_stat.datetime,
                         tag: tag_stat.tag,
                         ..Default::default()
                     };

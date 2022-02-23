@@ -1,7 +1,7 @@
-use std::fs::File;
-use serde::Deserialize;
-use anyhow::Result;
 use crate::gitimpl::Repository;
+use anyhow::Result;
+use serde::Deserialize;
+use std::fs::File;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct AuthorMapping {

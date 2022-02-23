@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Default)]
@@ -21,8 +21,7 @@ pub struct Commit {
     pub repo: String,
     pub hash: String,
     pub author: Author,
-    pub timestamp: i64,
-    pub timezone: String,
+    pub datetime: String,
     pub change_files: i64,
     pub changes: Vec<FileExtChange>,
 }
@@ -31,8 +30,7 @@ pub struct Commit {
 pub struct TagStats {
     pub hash: String,
     pub tag: String,
-    pub timestamp: i64,
-    pub timezone: String,
+    pub datetime: String,
     pub stats: FileExtStats,
 }
 

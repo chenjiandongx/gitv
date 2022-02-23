@@ -1,13 +1,10 @@
 use anyhow::{Error, Result};
+use async_process::Command;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use std::collections::HashMap;
-use std::path::Path;
-
 use std::sync::Arc;
-use std::time::Instant;
-use async_process::Command;
-use itertools::Itertools;
+use std::{collections::HashMap, path::Path};
+
 use crate::gitimpl::*;
 
 lazy_static! {
@@ -34,27 +31,19 @@ impl TryFrom<&[String]> for Commit {
 
                 let caps = caps.unwrap();
                 for i in 0..caps.len() {
+                    let cap = caps.get(i).unwrap().as_str().to_string();
                     match i {
                         1 => {
-                            let fields = caps
-                                .get(i)
-                                .unwrap()
-                                .as_str()
-                                .split_ascii_whitespace()
-                                .collect::<Vec<&str>>();
-                            if fields.len() == 2 {
-                                commit.timestamp = fields[0].parse::<i64>()?;
-                                commit.timezone = fields[1].to_string();
-                            }
+                            commit.datetime = cap;
                         }
                         2 => {
-                            commit.hash = caps.get(i).unwrap().as_str().to_string();
+                            commit.hash = cap;
                         }
                         3 => {
-                            commit.author.name = caps.get(i).unwrap().as_str().to_string();
+                            commit.author.name = cap;
                         }
                         4 => {
-                            commit.author.email = caps.get(i).unwrap().as_str().to_string();
+                            commit.author.email = cap;
                             let email = commit.author.email.clone();
                             let fields = email.splitn(2, '@').collect::<Vec<&str>>();
                             if fields.len() >= 2 {
@@ -76,16 +65,16 @@ impl TryFrom<&[String]> for Commit {
 
             let caps = caps.unwrap();
             for i in 0..caps.len() {
+                let cap = caps.get(i).unwrap().as_str();
                 match i {
                     1 => {
-                        change.insertion =
-                            caps.get(i).unwrap().as_str().parse::<i64>().unwrap_or(0);
+                        change.insertion = cap.parse::<i64>().unwrap_or(0);
                     }
                     2 => {
-                        change.deletion = caps.get(i).unwrap().as_str().parse::<i64>().unwrap_or(0);
+                        change.deletion = cap.parse::<i64>().unwrap_or(0);
                     }
                     3 => {
-                        let p = Path::new(caps.get(i).unwrap().as_str());
+                        let p = Path::new(cap);
                         if p.extension().is_some() {
                             change.ext = p.extension().unwrap().to_str().unwrap().to_string();
                         } else {
@@ -154,7 +143,12 @@ impl TryFrom<&[String]> for FileExtStats {
     }
 }
 
-async fn subcommand(repo: &Repository, command: &str, args: &[&str], delimiter: char) -> Result<Vec<String>> {
+async fn subcommand(
+    repo: &Repository,
+    command: &str,
+    args: &[&str],
+    delimiter: char,
+) -> Result<Vec<String>> {
     let mut args = args.to_vec();
     args.insert(0, command);
 
@@ -177,7 +171,9 @@ async fn subcommand(repo: &Repository, command: &str, args: &[&str], delimiter: 
 
 async fn git_clone(repo: &Repository) -> Result<()> {
     let mut c = Command::new("git");
-    c.args(&["clone", repo.remote.as_str(), repo.path.as_str()]).output().await?;
+    c.args(&["clone", repo.remote.as_str(), repo.path.as_str()])
+        .output()
+        .await?;
     Ok(())
 }
 
@@ -209,13 +205,17 @@ impl GitImpl for GitBinaryImpl {
     // https://stackoverflow.com/questions/11856983/why-git-authordate-is-different-from-commitdate
     // https://stackoverflow.com/questions/37311494/how-to-get-git-to-show-commits-in-a-specified-date-range-for-author-date
     async fn commits(&self, repo: &Repository) -> Result<Vec<Commit>> {
-        let lines = git_log(repo, &[
-            "--no-merges",
-            "--date=raw",
-            "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-            "--numstat",
-            "HEAD",
-        ]).await?;
+        let lines = git_log(
+            repo,
+            &[
+                "--no-merges",
+                "--date=rfc",
+                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                "--numstat",
+                "HEAD",
+            ],
+        )
+        .await?;
 
         let mut indexes = vec![];
         for (idx, line) in lines.iter().enumerate() {
@@ -242,6 +242,7 @@ impl GitImpl for GitBinaryImpl {
         let mutex = Arc::new(tokio::sync::Mutex::new(stats));
         let lines = git_show_ref(repo, &["--tags"]).await?;
         let mut handles = vec![];
+
         for line in lines {
             let fields: Vec<String> = line.splitn(2, ' ').map(|x| x.to_string()).collect();
             if fields.len() < 2 {
@@ -254,13 +255,18 @@ impl GitImpl for GitBinaryImpl {
                 let lines = git_ls_tree(&repo, &["-r", "-l", "-z", hash]).await.unwrap();
                 let file_ext_stats = FileExtStats::try_from(lines.as_slice()).unwrap();
 
-                let log = git_log(&repo, &[
-                    "--date=raw",
-                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                    "--numstat",
-                    hash,
-                    "-1",
-                ]).await.unwrap();
+                let log = git_log(
+                    &repo,
+                    &[
+                        "--date=rfc",
+                        "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                        "--numstat",
+                        hash,
+                        "-1",
+                    ],
+                )
+                .await
+                .unwrap();
 
                 let mut tag_stat = TagStats {
                     stats: file_ext_stats,
@@ -269,8 +275,7 @@ impl GitImpl for GitBinaryImpl {
                 if let Ok(commit) = Commit::try_from(&log[..]) {
                     tag_stat.tag = tag.to_string();
                     tag_stat.hash = hash.to_string();
-                    tag_stat.timestamp = commit.timestamp;
-                    tag_stat.timezone = commit.timezone;
+                    tag_stat.datetime = commit.datetime;
                 }
                 let mut data = lock.lock().await;
                 data.push(tag_stat);

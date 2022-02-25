@@ -33,6 +33,10 @@ async fn main() -> Result<()> {
     ctx.register_udf(udf_weekday());
     ctx.register_udf(udf_hour());
     ctx.register_udf(udf_timezone());
+    ctx.register_udf(udf_date_day());
+    ctx.register_udf(udf_date_month());
+    ctx.register_udaf(udf_active_days());
+    ctx.register_udaf(udf_active_longest());
 
     // register csv file with the execution context
     ctx.register_csv(
@@ -42,7 +46,19 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    let df = ctx.sql("select year(datetime) as year, month(datetime) as month, weekday(datetime) as weekday, hour(datetime) as hour, timezone(datetime) as timezone from chenjiandongx limit 1").await?;
+    let df = ctx
+        .sql("select active_longest(datetime) as longest, author_name from chenjiandongx where metric='COMMIT' group by author_name")
+        .await?;
+    df.show().await?;
+
+    let df = ctx
+        .sql("select date_month(datetime) as year, active_days(datetime) from chenjiandongx group by year order by year")
+        .await?;
+    df.show().await?;
+
+    let df = ctx
+        .sql("select date_month(datetime) as year, count(distinct(date_day(datetime))) from chenjiandongx group by year order by year")
+        .await?;
     df.show().await?;
 
     let _df = ctx

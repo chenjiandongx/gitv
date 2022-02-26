@@ -266,7 +266,9 @@ impl ActiveLongest {
         for i in 0..data.len() - 1 {
             let k = data[i + 1] - data[i];
             match k {
-                0 | 1 => count += k,
+                0 | 1 => {
+                    count += k;
+                }
                 _ => {
                     if count > max {
                         max = count
@@ -322,7 +324,7 @@ mod tests {
     use crate::register_udf::ActiveLongest;
 
     #[test]
-    fn it_works() {
+    fn test_active_longest() {
         let active_longest = ActiveLongest::new();
         let data = &vec![];
         assert_eq!(0, active_longest.calc_longest(data));

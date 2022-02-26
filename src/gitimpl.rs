@@ -10,9 +10,9 @@ pub struct Author {
 }
 
 impl Author {
-    fn domain(&self) -> String {
+    pub fn domain(&self) -> String {
         let email = self.email.clone();
-        let fields = email.rsplitn(2, '@').collect::<Vec<&str>>();
+        let fields = email.splitn(2, '@').collect::<Vec<&str>>();
         fields.last().unwrap().to_string()
     }
 }
@@ -35,14 +35,6 @@ pub struct Commit {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct TagStats {
-    pub hash: String,
-    pub tag: String,
-    pub datetime: String,
-    pub stats: FileExtStats,
-}
-
-#[derive(Debug, Clone, Default)]
 pub struct FileExtStat {
     pub ext: String,
     pub size: i64,
@@ -50,7 +42,10 @@ pub struct FileExtStat {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct FileExtStats {
+pub struct TagStats {
+    pub hash: String,
+    pub tag: String,
+    pub datetime: String,
     pub stats: Vec<FileExtStat>,
 }
 

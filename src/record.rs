@@ -58,11 +58,13 @@ impl<'a> RecordSerializer for CsvSerializer {
             let commits = self.git.commits(repo, author_mappings.clone()).await;
             if let Ok(commits) = commits {
                 for commit in commits {
+                    let domain = commit.author.domain();
                     let common_record = Record {
                         repo_name: repo.name.clone(),
                         datetime: commit.datetime,
                         author_name: commit.author.name,
                         author_email: commit.author.email,
+                        author_domain: domain,
                         ..Default::default()
                     };
 

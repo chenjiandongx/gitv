@@ -15,46 +15,6 @@ lazy_static! {
         regex::Regex::new(r"([0-9-]+)\t([0-9-]+)\t(.*)").unwrap();
 }
 
-impl TryFrom<&[String]> for FileExtStats {
-    type Error = anyhow::Error;
-
-    fn try_from(lines: &[String]) -> Result<Self> {
-        let mut stats: HashMap<String, FileExtStat> = HashMap::new();
-
-        for line in lines {
-            let fields: Vec<&str> = line.split_ascii_whitespace().collect();
-            if fields.len() < 5 {
-                continue;
-            }
-            if fields[0] == "106000" {
-                continue;
-            }
-
-            let n = fields[3].parse::<i64>().unwrap_or(0);
-            let p = Path::new(fields[4]);
-            if p.extension().is_none() {
-                continue;
-            }
-            let ext = p.extension().unwrap().to_str().unwrap().to_string();
-            let s = stats
-                .entry(ext.clone())
-                .or_insert_with(FileExtStat::default);
-            s.size += n;
-            s.files += 1;
-        }
-
-        let mut fs = FileExtStats::default();
-        for (k, v) in stats {
-            fs.stats.push(FileExtStat {
-                ext: k,
-                size: v.size,
-                files: v.files,
-            })
-        }
-        Ok(fs)
-    }
-}
-
 async fn subcommand(
     repo: &Repository,
     command: &str,
@@ -204,6 +164,42 @@ fn parse_commit(lines: &[String], author_mappings: Vec<AuthorMapping>) -> Result
     Ok(commit)
 }
 
+fn parse_file_ext_stats(lines: &[String]) -> Result<Vec<FileExtStat>> {
+    let mut stats: HashMap<String, FileExtStat> = HashMap::new();
+
+    for line in lines {
+        let fields: Vec<&str> = line.split_ascii_whitespace().collect();
+        if fields.len() < 5 {
+            continue;
+        }
+        if fields[0] == "106000" {
+            continue;
+        }
+
+        let n = fields[3].parse::<i64>().unwrap_or(0);
+        let p = Path::new(fields[4]);
+        if p.extension().is_none() {
+            continue;
+        }
+        let ext = p.extension().unwrap().to_str().unwrap().to_string();
+        let s = stats
+            .entry(ext.clone())
+            .or_insert_with(FileExtStat::default);
+        s.size += n;
+        s.files += 1;
+    }
+
+    let mut fes = vec![];
+    for (k, v) in stats {
+        fes.push(FileExtStat {
+            ext: k,
+            size: v.size,
+            files: v.files,
+        })
+    }
+    Ok(fes)
+}
+
 #[async_trait]
 impl GitImpl for GitBinaryImpl {
     async fn clone(&self, repo: &Repository) -> Result<()> {
@@ -240,9 +236,8 @@ impl GitImpl for GitBinaryImpl {
 
         let mut commits = vec![];
         for i in 1..indexes.len() {
-            let author_mappings = author_mappings.clone();
             let (l, r) = (indexes[i - 1], indexes[i]);
-            if let Ok(mut commit) = parse_commit(&lines[l..r], author_mappings) {
+            if let Ok(mut commit) = parse_commit(&lines[l..r], author_mappings.clone()) {
                 commit.repo = repo.name.to_string();
                 commits.push(commit);
             }
@@ -272,7 +267,7 @@ impl GitImpl for GitBinaryImpl {
             let handle = tokio::spawn(async move {
                 let (hash, tag) = (&fields[0], &fields[1]["refs/tags/".len()..]);
                 let lines = git_ls_tree(&repo, &["-r", "-l", "-z", hash]).await.unwrap();
-                let file_ext_stats = FileExtStats::try_from(lines.as_slice()).unwrap();
+                let file_ext_stats = parse_file_ext_stats(&lines).unwrap();
 
                 let log = git_log(
                     &repo,

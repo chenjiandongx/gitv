@@ -1,12 +1,20 @@
+use crate::config::AuthorMapping;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct Author {
     pub name: String,
     pub email: String,
-    pub domain: String,
+}
+
+impl Author {
+    fn domain(&self) -> String {
+        let email = self.email.clone();
+        let fields = email.rsplitn(2, '@').collect::<Vec<&str>>();
+        fields.last().unwrap().to_string()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -57,7 +65,15 @@ pub struct Repository {
 #[async_trait]
 pub trait GitImpl: Send + Sync {
     async fn clone(&self, repo: &Repository) -> Result<()>;
-    async fn commits(&self, repo: &Repository) -> Result<Vec<Commit>>;
-    async fn tags(&self, repo: &Repository) -> Result<Vec<TagStats>>;
+    async fn commits(
+        &self,
+        repo: &Repository,
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<Vec<Commit>>;
+    async fn tags(
+        &self,
+        repo: &Repository,
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<Vec<TagStats>>;
     async fn current_branch(&self, repo: &Repository) -> Result<String>;
 }

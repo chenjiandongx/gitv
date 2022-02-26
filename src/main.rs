@@ -7,6 +7,7 @@ mod register_udf;
 use crate::register_udf::udf_weekday;
 use anyhow::Result;
 use chrono::{Datelike, TimeZone, Utc};
+pub use config::*;
 use datafusion::arrow::array::{StringArray, UInt64Array};
 use datafusion::prelude::*;
 pub use gitbinary::*;
@@ -15,15 +16,23 @@ pub use register_udf::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let c = config::load_config("./config.yaml")?;
+    let c: Config = config::load_config("./config.yaml")?;
     println!("{:#?}", c);
 
     let repos = &c.databases[0].repositories;
     let serializer = CsvSerializer {
         git: Box::new(GitBinaryImpl),
     };
+
+    // let mappings = vec![];
+    // let mappings = mappings.as_slice();
     serializer
-        .serialize("./database".to_string(), "dongdongx".to_string(), repos)
+        .serialize(
+            "./database".to_string(),
+            "dongdongx".to_string(),
+            repos,
+            c.author_mappings,
+        )
         .await?;
 
     // create local execution context

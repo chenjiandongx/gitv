@@ -1,3 +1,4 @@
+use crate::config::AuthorMapping;
 use anyhow::{Error, Result};
 use async_process::Command;
 use async_trait::async_trait;
@@ -12,95 +13,6 @@ lazy_static! {
         regex::Regex::new(r"<(.*?)> <(.*)> <(.*)> <(.*?)>").unwrap();
     static ref COMMIT_CHANGE_REGEXP: regex::Regex =
         regex::Regex::new(r"([0-9-]+)\t([0-9-]+)\t(.*)").unwrap();
-}
-
-impl TryFrom<&[String]> for Commit {
-    type Error = anyhow::Error;
-
-    fn try_from(lines: &[String]) -> Result<Self> {
-        let mut changes: HashMap<String, FileExtChange> = HashMap::new();
-        let mut count: i64 = 0;
-
-        let mut commit = Commit::default();
-        for (idx, line) in lines.iter().enumerate() {
-            if idx == 0 {
-                let caps = COMMIT_INFO_REGEXP.captures(line.as_str());
-                if caps.is_none() {
-                    return Err(Error::msg(format!("invalid commit format: {}", line)));
-                };
-
-                let caps = caps.unwrap();
-                for i in 0..caps.len() {
-                    let cap = caps.get(i).unwrap().as_str().to_string();
-                    match i {
-                        1 => {
-                            commit.datetime = cap;
-                        }
-                        2 => {
-                            commit.hash = cap;
-                        }
-                        3 => {
-                            commit.author.name = cap;
-                        }
-                        4 => {
-                            commit.author.email = cap;
-                            let email = commit.author.email.clone();
-                            let fields = email.splitn(2, '@').collect::<Vec<&str>>();
-                            if fields.len() >= 2 {
-                                commit.author.domain = fields.get(1).unwrap().to_string();
-                            }
-                        }
-                        _ => (),
-                    }
-                }
-                continue;
-            }
-
-            count += 1;
-            let mut change = FileExtChange::default();
-            let caps = COMMIT_CHANGE_REGEXP.captures(line.as_str());
-            if caps.is_none() {
-                return Err(Error::msg(format!("invalid change format: {}", line)));
-            }
-
-            let caps = caps.unwrap();
-            for i in 0..caps.len() {
-                let cap = caps.get(i).unwrap().as_str();
-                match i {
-                    1 => {
-                        change.insertion = cap.parse::<i64>().unwrap_or(0);
-                    }
-                    2 => {
-                        change.deletion = cap.parse::<i64>().unwrap_or(0);
-                    }
-                    3 => {
-                        let p = Path::new(cap);
-                        if p.extension().is_some() {
-                            change.ext = p.extension().unwrap().to_str().unwrap().to_string();
-                        } else {
-                            change.ext = "".to_string();
-                        }
-                    }
-                    _ => (),
-                }
-            }
-
-            let c = changes.entry(change.ext.clone()).or_insert(FileExtChange {
-                ext: change.ext,
-                ..Default::default()
-            });
-            c.insertion += change.insertion;
-            c.deletion += change.deletion;
-        }
-
-        let mut cs = vec![];
-        for c in changes {
-            cs.push(c.to_owned().1);
-        }
-        commit.changes = cs;
-        commit.change_files = count;
-        Ok(commit)
-    }
 }
 
 impl TryFrom<&[String]> for FileExtStats {
@@ -195,6 +107,103 @@ async fn git_ls_tree(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
 
 pub struct GitBinaryImpl;
 
+fn parse_commit_info(
+    commit: &mut Commit,
+    line: &str,
+    author_mappings: Vec<AuthorMapping>,
+) -> Result<()> {
+    let caps = COMMIT_INFO_REGEXP.captures(line);
+    if caps.is_none() {
+        return Err(Error::msg(format!("invalid commit format: {}", line)));
+    };
+
+    let caps = caps.unwrap();
+    for i in 0..caps.len() {
+        let cap = caps.get(i).unwrap().as_str().to_string();
+        match i {
+            1 => {
+                commit.datetime = cap;
+            }
+            2 => {
+                commit.hash = cap;
+            }
+            3 => {
+                commit.author.name = cap;
+            }
+            4 => {
+                commit.author.email = cap;
+            }
+            _ => (),
+        }
+    }
+
+    for author_mapping in author_mappings.iter() {
+        if commit.author == author_mapping.source {
+            commit.author = author_mapping.destination.clone();
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn parse_commit_changes(commit: &mut Commit, lines: &[String]) -> Result<()> {
+    let mut count = 0;
+    let mut changes: HashMap<String, FileExtChange> = HashMap::new();
+
+    for line in lines.iter() {
+        count += 1;
+        let mut change = FileExtChange::default();
+        let caps = COMMIT_CHANGE_REGEXP.captures(line.as_str());
+        if caps.is_none() {
+            return Err(Error::msg(format!("invalid change format: {}", line)));
+        }
+
+        let caps = caps.unwrap();
+        for i in 0..caps.len() {
+            let cap = caps.get(i).unwrap().as_str();
+            match i {
+                1 => {
+                    change.insertion = cap.parse::<i64>().unwrap_or(0);
+                }
+                2 => {
+                    change.deletion = cap.parse::<i64>().unwrap_or(0);
+                }
+                3 => {
+                    let p = Path::new(cap);
+                    if p.extension().is_some() {
+                        change.ext = p.extension().unwrap().to_str().unwrap().to_string();
+                    } else {
+                        change.ext = "".to_string();
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        let c = changes.entry(change.ext.clone()).or_insert(FileExtChange {
+            ext: change.ext,
+            ..Default::default()
+        });
+        c.insertion += change.insertion;
+        c.deletion += change.deletion;
+    }
+
+    let mut cs = vec![];
+    for c in changes {
+        cs.push(c.to_owned().1);
+    }
+    commit.changes = cs;
+    commit.change_files = count;
+    Ok(())
+}
+
+fn parse_commit(lines: &[String], author_mappings: Vec<AuthorMapping>) -> Result<Commit> {
+    let mut commit = Commit::default();
+    parse_commit_info(&mut commit, &lines[0], author_mappings)?;
+    parse_commit_changes(&mut commit, &lines[1..])?;
+    Ok(commit)
+}
+
 #[async_trait]
 impl GitImpl for GitBinaryImpl {
     async fn clone(&self, repo: &Repository) -> Result<()> {
@@ -204,7 +213,11 @@ impl GitImpl for GitBinaryImpl {
     // TODO(optimize): 按时间切割 并发执行
     // https://stackoverflow.com/questions/11856983/why-git-authordate-is-different-from-commitdate
     // https://stackoverflow.com/questions/37311494/how-to-get-git-to-show-commits-in-a-specified-date-range-for-author-date
-    async fn commits(&self, repo: &Repository) -> Result<Vec<Commit>> {
+    async fn commits(
+        &self,
+        repo: &Repository,
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<Vec<Commit>> {
         let lines = git_log(
             repo,
             &[
@@ -227,8 +240,9 @@ impl GitImpl for GitBinaryImpl {
 
         let mut commits = vec![];
         for i in 1..indexes.len() {
+            let author_mappings = author_mappings.clone();
             let (l, r) = (indexes[i - 1], indexes[i]);
-            if let Ok(mut commit) = Commit::try_from(&lines[l..r]) {
+            if let Ok(mut commit) = parse_commit(&lines[l..r], author_mappings) {
                 commit.repo = repo.name.to_string();
                 commits.push(commit);
             }
@@ -237,7 +251,11 @@ impl GitImpl for GitBinaryImpl {
         Ok(commits)
     }
 
-    async fn tags(&self, repo: &Repository) -> Result<Vec<TagStats>> {
+    async fn tags(
+        &self,
+        repo: &Repository,
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<Vec<TagStats>> {
         let stats: Vec<TagStats> = vec![];
         let mutex = Arc::new(tokio::sync::Mutex::new(stats));
         let lines = git_show_ref(repo, &["--tags"]).await?;
@@ -250,6 +268,7 @@ impl GitImpl for GitBinaryImpl {
             }
             let lock = mutex.clone();
             let repo = repo.clone();
+            let author_mappings = author_mappings.clone();
             let handle = tokio::spawn(async move {
                 let (hash, tag) = (&fields[0], &fields[1]["refs/tags/".len()..]);
                 let lines = git_ls_tree(&repo, &["-r", "-l", "-z", hash]).await.unwrap();
@@ -272,7 +291,7 @@ impl GitImpl for GitBinaryImpl {
                     stats: file_ext_stats,
                     ..Default::default()
                 };
-                if let Ok(commit) = Commit::try_from(&log[..]) {
+                if let Ok(commit) = parse_commit(&log[..], author_mappings) {
                     tag_stat.tag = tag.to_string();
                     tag_stat.hash = hash.to_string();
                     tag_stat.datetime = commit.datetime;

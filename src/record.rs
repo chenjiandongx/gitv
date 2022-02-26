@@ -1,4 +1,6 @@
+use crate::config::AuthorMapping;
 use crate::gitimpl::{GitImpl, Repository};
+
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Serialize;
@@ -11,7 +13,6 @@ static RECORD_TAG: &str = "TAG";
 #[derive(Debug, Default, Serialize, Clone)]
 struct Record {
     metric: String,
-    hash: String,
     repo_name: String,
     datetime: String,
     author_name: String,
@@ -27,7 +28,13 @@ struct Record {
 
 #[async_trait]
 pub trait RecordSerializer {
-    async fn serialize(&self, path: String, database: String, repos: &[Repository]) -> Result<()>;
+    async fn serialize(
+        &self,
+        path: String,
+        database: String,
+        repos: &[Repository],
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<()>;
 }
 
 pub struct CsvSerializer {
@@ -36,22 +43,26 @@ pub struct CsvSerializer {
 
 #[async_trait]
 impl<'a> RecordSerializer for CsvSerializer {
-    async fn serialize(&self, path: String, database: String, repos: &[Repository]) -> Result<()> {
+    async fn serialize(
+        &self,
+        path: String,
+        database: String,
+        repos: &[Repository],
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<()> {
         // TODO(optimize): 判断文件是否存在 或者有多种文件创建模式可选？
         let file = File::create(format!("{}/{}.csv", path, database))?;
         let mut wtr = csv::Writer::from_writer(file);
 
         for repo in repos.iter() {
-            let commits = self.git.commits(repo).await;
+            let commits = self.git.commits(repo, author_mappings.clone()).await;
             if let Ok(commits) = commits {
                 for commit in commits {
                     let common_record = Record {
                         repo_name: repo.name.clone(),
                         datetime: commit.datetime,
-                        hash: commit.hash,
                         author_name: commit.author.name,
                         author_email: commit.author.email,
-                        author_domain: commit.author.domain,
                         ..Default::default()
                     };
 
@@ -71,7 +82,7 @@ impl<'a> RecordSerializer for CsvSerializer {
             }
             wtr.flush()?;
 
-            let tag_stats = self.git.tags(repo).await;
+            let tag_stats = self.git.tags(repo, author_mappings.clone()).await;
             if let Ok(tag_stats) = tag_stats {
                 for tag_stat in tag_stats {
                     let record = Record {

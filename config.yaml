@@ -1,8 +1,28 @@
 author_mappings:
-  - source: "dongdongx,chenjiandongx@qq.com"
-    destination: "chenjiandongx,chenjiandongx@qq.com"
-  - source: "陈键冬,chenjiandongx@qq.com"
-    destination: "chenjiandongx,chenjiandongx@qq.com"
+  - source:
+      name: "dongdongx"
+      email: "chenjiandongx@qq.com"
+    destination:
+      name: "chenjiandongx"
+      email: "chenjiandongx@qq.com"
+  - source:
+      name: "陈键冬"
+      email: "chenjiandongx@qq.com"
+    destination:
+      name: "chenjiandongx"
+      email: "chenjiandongx@qq.com"
+  - source:
+      name: "dongdong"
+      email: "chenjiandongx@qq.com"
+    destination:
+      name: "chenjiandongx"
+      email: "chenjiandongx@qq.com"
+  - source:
+      name: "dingdongx"
+      email: "chenjiandongx@qq.com"
+    destination:
+      name: "chenjiandongx"
+      email: "chenjiandongx@qq.com"
 
 databases:
   - name: "dongdongx"

@@ -1,12 +1,12 @@
-use crate::gitimpl::Repository;
+use crate::gitimpl::{Author, Repository};
 use anyhow::Result;
 use serde::Deserialize;
 use std::fs::File;
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct AuthorMapping {
-    pub source: String,
-    pub destination: String,
+    pub source: Author,
+    pub destination: Author,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

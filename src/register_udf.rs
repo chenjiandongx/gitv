@@ -4,10 +4,7 @@ use datafusion::physical_plan::udaf::AggregateUDF;
 use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
 use datafusion::{
-    arrow::{
-        array::{ArrayRef, StringArray, UInt64Array},
-        datatypes::DataType,
-    },
+    arrow::{array, datatypes::DataType},
     error::Result,
     physical_plan::{
         functions::{make_scalar_function, Volatility},
@@ -15,18 +12,36 @@ use datafusion::{
     },
     prelude::*,
 };
-use std::collections::{HashMap, HashSet};
+use lazy_static::lazy_static;
+use std::collections::HashSet;
 use std::sync::Arc;
 
+lazy_static! {
+    pub(crate) static ref UDFS: Vec<fn() -> ScalarUDF> = vec![
+        udf_year,
+        udf_month,
+        udf_weekday,
+        udf_hour,
+        udf_timezone,
+        udf_date_day,
+        udf_date_month,
+    ];
+    pub(crate) static ref UDAFS: Vec<fn() -> AggregateUDF> =
+        vec![udf_active_days, udf_active_longest];
+}
+
 pub fn udf_year() -> ScalarUDF {
-    let year = |args: &[ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<StringArray>().unwrap();
+    let year = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
         let array = base
             .iter()
             .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().year() as u64))
-            .collect::<UInt64Array>();
+            .collect::<array::UInt64Array>();
 
-        Ok(Arc::new(array) as ArrayRef)
+        Ok(Arc::new(array) as array::ArrayRef)
     };
 
     let year = make_scalar_function(year);
@@ -40,14 +55,17 @@ pub fn udf_year() -> ScalarUDF {
 }
 
 pub fn udf_month() -> ScalarUDF {
-    let month = |args: &[ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<StringArray>().unwrap();
+    let month = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
         let array = base
             .iter()
             .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().month() as u64))
-            .collect::<UInt64Array>();
+            .collect::<array::UInt64Array>();
 
-        Ok(Arc::new(array) as ArrayRef)
+        Ok(Arc::new(array) as array::ArrayRef)
     };
 
     let month = make_scalar_function(month);
@@ -61,8 +79,11 @@ pub fn udf_month() -> ScalarUDF {
 }
 
 pub fn udf_weekday() -> ScalarUDF {
-    let weekday = |args: &[ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<StringArray>().unwrap();
+    let weekday = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
         let array = base
             .iter()
             .map(|x| {
@@ -73,9 +94,9 @@ pub fn udf_weekday() -> ScalarUDF {
                         .to_string(),
                 )
             })
-            .collect::<StringArray>();
+            .collect::<array::StringArray>();
 
-        Ok(Arc::new(array) as ArrayRef)
+        Ok(Arc::new(array) as array::ArrayRef)
     };
 
     let weekday = make_scalar_function(weekday);
@@ -89,14 +110,17 @@ pub fn udf_weekday() -> ScalarUDF {
 }
 
 pub fn udf_hour() -> ScalarUDF {
-    let hour = |args: &[ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<StringArray>().unwrap();
+    let hour = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
         let array = base
             .iter()
             .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().hour() as u64))
-            .collect::<UInt64Array>();
+            .collect::<array::UInt64Array>();
 
-        Ok(Arc::new(array) as ArrayRef)
+        Ok(Arc::new(array) as array::ArrayRef)
     };
 
     let hour = make_scalar_function(hour);
@@ -110,8 +134,11 @@ pub fn udf_hour() -> ScalarUDF {
 }
 
 pub fn udf_timezone() -> ScalarUDF {
-    let timezone = |args: &[ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<StringArray>().unwrap();
+    let timezone = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
         let array = base
             .iter()
             .map(|x| {
@@ -122,9 +149,9 @@ pub fn udf_timezone() -> ScalarUDF {
                         .to_string(),
                 )
             })
-            .collect::<StringArray>();
+            .collect::<array::StringArray>();
 
-        Ok(Arc::new(array) as ArrayRef)
+        Ok(Arc::new(array) as array::ArrayRef)
     };
 
     let timezone = make_scalar_function(timezone);
@@ -138,8 +165,11 @@ pub fn udf_timezone() -> ScalarUDF {
 }
 
 fn udf_date(name: &str, format: &'static str) -> ScalarUDF {
-    let date = |args: &[ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<StringArray>().unwrap();
+    let date = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
         let array = base
             .iter()
             .map(|x| {
@@ -150,9 +180,9 @@ fn udf_date(name: &str, format: &'static str) -> ScalarUDF {
                         .to_string(),
                 )
             })
-            .collect::<StringArray>();
+            .collect::<array::StringArray>();
 
-        Ok(Arc::new(array) as ArrayRef)
+        Ok(Arc::new(array) as array::ArrayRef)
     };
 
     let date = make_scalar_function(date);
@@ -256,7 +286,7 @@ impl ActiveLongest {
         Self { data: vec![], n: 0 }
     }
 
-    fn calc_longest(&self, data: &[i64]) -> i64 {
+    fn calc_longest(&self, data: &[i64], ratio: i64) -> i64 {
         if data.len() <= 1 {
             return data.len() as i64;
         }
@@ -264,7 +294,7 @@ impl ActiveLongest {
         let mut count: i64 = 1;
         let mut max: i64 = 0;
         for i in 0..data.len() - 1 {
-            let k = data[i + 1] - data[i];
+            let k = data[i + 1] / ratio - data[i] / ratio;
             match k {
                 0 | 1 => {
                     count += k;
@@ -296,12 +326,12 @@ impl Accumulator for ActiveLongest {
             e.iter()
                 .map(|v| {
                     let ts = DateTime::parse_from_rfc2822(v).unwrap().timestamp();
-                    self.data.push(ts / 86400);
+                    self.data.push(ts);
                 })
                 .collect()
         };
         self.data.sort_unstable();
-        self.n = self.calc_longest(&self.data);
+        self.n = self.calc_longest(&self.data, 3600 * 24);
 
         Ok(())
     }
@@ -327,18 +357,18 @@ mod tests {
     fn test_active_longest() {
         let active_longest = ActiveLongest::new();
         let data = &vec![];
-        assert_eq!(0, active_longest.calc_longest(data));
+        assert_eq!(0, active_longest.calc_longest(data, 1));
 
         let data = &vec![1];
-        assert_eq!(1, active_longest.calc_longest(data));
+        assert_eq!(1, active_longest.calc_longest(data, 1));
 
         let data = &[1, 2];
-        assert_eq!(2, active_longest.calc_longest(data));
+        assert_eq!(2, active_longest.calc_longest(data, 1));
 
         let data = &[1, 2, 3, 4];
-        assert_eq!(4, active_longest.calc_longest(data));
+        assert_eq!(4, active_longest.calc_longest(data, 1));
 
         let data = &[1, 2, 3, 4, 8, 9, 20, 21, 22, 23, 24];
-        assert_eq!(5, active_longest.calc_longest(data));
+        assert_eq!(5, active_longest.calc_longest(data, 1));
     }
 }

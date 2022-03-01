@@ -1,7 +1,7 @@
 use crate::config::AuthorMapping;
 use anyhow::Result;
 use async_trait::async_trait;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct Author {
@@ -49,7 +49,7 @@ pub struct TagStats {
     pub stats: Vec<FileExtStat>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Repository {
     pub name: String,
     pub branches: Option<Vec<String>>,
@@ -71,4 +71,9 @@ pub trait GitImpl: Send + Sync {
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<Vec<TagStats>>;
     async fn current_branch(&self, repo: &Repository) -> Result<String>;
+}
+
+#[async_trait]
+pub trait RepoSourcer {
+    async fn repositories(&self) -> Result<Vec<Repository>>;
 }

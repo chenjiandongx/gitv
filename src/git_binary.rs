@@ -1,12 +1,11 @@
 use crate::config::AuthorMapping;
+use crate::git_impl::*;
 use anyhow::{Error, Result};
 use async_process::Command;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
-
-use crate::gitimpl::*;
 
 lazy_static! {
     static ref COMMIT_INFO_REGEXP: regex::Regex =

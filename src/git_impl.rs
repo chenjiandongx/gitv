@@ -60,6 +60,8 @@ pub struct Repository {
 #[async_trait]
 pub trait GitImpl: Send + Sync {
     async fn clone(&self, repo: &Repository) -> Result<()>;
+    async fn pull(&self, repo: &Repository) -> Result<()>;
+    async fn clone_or_pull(&self, repos: Vec<Repository>) -> Result<()>;
     async fn commits(
         &self,
         repo: &Repository,

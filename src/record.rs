@@ -50,6 +50,7 @@ impl<'a> RecordSerializer for CsvSerializer {
     async fn serialize(&self, config: &Config) -> Result<()> {
         // TODO(optimize): 判断文件是否存在 或者有多种文件创建模式可选？
         let uri = config.database.uri(self.extension());
+        println!("uri: {}", uri);
         let mut wtr = csv::Writer::from_path(Path::new(uri.as_str())).unwrap();
 
         for repo in config.database.repositories.iter() {

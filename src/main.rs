@@ -32,21 +32,29 @@ struct D {
 #[tokio::main]
 async fn main() -> Result<()> {
     let c: Config = config::load_config("./private.yaml")?;
-    println!("config: {:#?}", c);
+    // println!("config: {:#?}", c);
 
-    let github_sourcer = GithubSourcer::new(&c.github);
+    // let github_sourcer = GithubSourcer::new(&c.github);
+    //
+    // let repos = github_sourcer.repositories().await?;
+    // let repos1 = repos.clone();
+    // println!("repos: {:#?}", repos.len());
 
-    let repos = github_sourcer.repositories().await?;
-    print!("repos: {:#?}", repos.len());
+    // let f = File::create("./database.yaml").unwrap();
+    // serde_yaml::to_writer(
+    //     f,
+    //     &D {
+    //         repositories: repos,
+    //     },
+    // )
+    // .unwrap();
 
-    let f = File::create("./database.yaml").unwrap();
-    serde_yaml::to_writer(
-        f,
-        &D {
-            repositories: repos,
-        },
-    )
-    .unwrap();
+    let git = GitBinaryImpl {};
+    // git.clone_or_pull(repos1);
+    // for repo in repos1 {
+    //     println!("repo: {}", repo.path);
+    //     git.clone_or_pull([&repo).await?;
+    // }
 
     let serializer = CsvSerializer::new(Box::new(GitBinaryImpl));
     // serializer.serialize(&c).await?;
@@ -68,7 +76,7 @@ async fn main() -> Result<()> {
     .await?;
 
     let cr = query::select(c, &mut ctx).await?;
-    println!("cr: {:#?}", cr);
+    // println!("cr: {:#?}", cr);
 
     Ok(())
 }

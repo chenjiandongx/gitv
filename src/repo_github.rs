@@ -3,6 +3,7 @@ use crate::git_impl::{RepoSourcer, Repository};
 use anyhow::Result;
 use async_trait::*;
 use serde::Deserialize;
+use std::path::Path;
 
 // `github` subcommand
 // args:
@@ -37,7 +38,6 @@ impl<'a> RepoSourcer for GithubSourcer<'a> {
         let mut finish = false;
         let mut page: u16 = 1;
         let mut repos = vec![];
-        let orgs: Vec<&str> = self.opts.exclude_org.split(',').map(|x| x.trim()).collect();
         while !finish {
             let params = [
                 ("per_page", "100"),
@@ -62,6 +62,7 @@ impl<'a> RepoSourcer for GithubSourcer<'a> {
                 finish = true
             }
 
+            let orgs: Vec<&str> = self.opts.exclude_org.split(',').map(|x| x.trim()).collect();
             for repo in response {
                 let mut ignore = false;
                 for org in orgs.iter() {
@@ -71,11 +72,16 @@ impl<'a> RepoSourcer for GithubSourcer<'a> {
                     }
                 }
                 if !ignore {
+                    let name = repo.full_name;
                     repos.push(Repository {
-                        name: repo.full_name,
+                        name: name.clone(),
                         branches: None,
                         remote: repo.clone_url,
-                        path: self.opts.path.clone(),
+                        path: Path::new(&self.opts.path.clone())
+                            .join(Path::new(&name))
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
                     });
                 }
             }

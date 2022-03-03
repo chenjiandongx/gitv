@@ -74,8 +74,3 @@ pub trait GitImpl: Send + Sync {
     ) -> Result<Vec<TagStats>>;
     async fn current_branch(&self, repo: &Repository) -> Result<String>;
 }
-
-#[async_trait]
-pub trait RepoSourcer {
-    async fn repositories(&self) -> Result<Vec<Repository>>;
-}

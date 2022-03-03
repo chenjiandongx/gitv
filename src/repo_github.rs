@@ -1,5 +1,6 @@
 use crate::config;
-use crate::git_impl::{RepoSourcer, Repository};
+use crate::git_impl::Repository;
+use crate::repo_syncer::RepoSyncer;
 use anyhow::Result;
 use async_trait::*;
 use serde::Deserialize;
@@ -12,12 +13,12 @@ use std::path::Path;
 // 3) -i --include-org
 // 4) -p --path
 
-pub struct GithubSourcer<'a> {
+pub struct GithubRepoSyncer<'a> {
     api: &'static str,
     pub opts: &'a config::Github,
 }
 
-impl<'a> GithubSourcer<'a> {
+impl<'a> GithubRepoSyncer<'a> {
     pub fn new(opt: &'a config::Github) -> Self {
         Self {
             api: "https://api.github.com/user/repos",
@@ -33,7 +34,7 @@ struct RepoResponse {
 }
 
 #[async_trait]
-impl<'a> RepoSourcer for GithubSourcer<'a> {
+impl<'a> RepoSyncer for GithubRepoSyncer<'a> {
     async fn repositories(&self) -> Result<Vec<Repository>> {
         let mut finish = false;
         let mut page: u16 = 1;

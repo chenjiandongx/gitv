@@ -4,8 +4,9 @@ mod git_binary;
 mod git_impl;
 mod query;
 mod record;
-mod register_udf;
+mod register_functions;
 mod repo_github;
+mod repo_syncer;
 
 use anyhow::Result;
 use config::*;
@@ -13,10 +14,8 @@ use datafusion::prelude::*;
 use git_binary::*;
 use git_impl::*;
 use record::*;
-use register_udf::*;
-use repo_github::*;
+use register_functions::*;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Payload {
@@ -49,7 +48,7 @@ async fn main() -> Result<()> {
     // )
     // .unwrap();
 
-    let git = GitBinaryImpl {};
+    let _git = GitBinaryImpl {};
     // git.clone_or_pull(repos1);
     // for repo in repos1 {
     //     println!("repo: {}", repo.path);
@@ -75,7 +74,7 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    let cr = query::select(c, &mut ctx).await?;
+    let _cr = query::select(c, &mut ctx).await?;
     // println!("cr: {:#?}", cr);
 
     Ok(())

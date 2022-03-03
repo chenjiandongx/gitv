@@ -25,15 +25,16 @@ lazy_static! {
         udf_month,
         udf_weekday,
         udf_hour,
+        udf_timestamp,
         udf_timezone,
-        udf_date_day,
-        udf_date_month,
+        udf_duration,
+        udf_time_format,
     ];
     pub(crate) static ref UDAFS: Vec<fn() -> AggregateUDF> = vec![
-        udf_active_days,
-        udf_active_longest,
-        udf_active_longest_start,
-        udf_active_longest_end,
+        udaf_active_days,
+        udaf_active_longest_count,
+        udaf_active_longest_start,
+        udaf_active_longest_end,
     ];
 }
 
@@ -140,6 +141,63 @@ pub fn udf_hour() -> ScalarUDF {
     )
 }
 
+pub fn udf_timestamp() -> ScalarUDF {
+    let timestamp = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
+        let array = base
+            .iter()
+            .map(|x| {
+                Some(
+                    DateTime::parse_from_rfc2822(x.unwrap())
+                        .unwrap()
+                        .timestamp() as u64,
+                )
+            })
+            .collect::<array::UInt64Array>();
+
+        Ok(Arc::new(array) as array::ArrayRef)
+    };
+
+    let timestamp = make_scalar_function(timestamp);
+    create_udf(
+        "timestamp",
+        vec![DataType::Utf8],
+        Arc::new(DataType::UInt64),
+        Volatility::Immutable,
+        timestamp,
+    )
+}
+
+pub fn udf_duration() -> ScalarUDF {
+    let duration = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::UInt64Array>()
+            .unwrap();
+        let array = base
+            .iter()
+            .map(|x| {
+                let t = Utc::now().timestamp() - x.unwrap() as i64;
+                Some(humantime::format_duration(Duration::seconds(t).to_std().unwrap()).to_string())
+            })
+            .collect::<array::StringArray>();
+
+        Ok(Arc::new(array) as array::ArrayRef)
+    };
+
+    let duration = make_scalar_function(duration);
+    create_udf(
+        "duration",
+        vec![DataType::UInt64],
+        Arc::new(DataType::Utf8),
+        Volatility::Immutable,
+        duration,
+    )
+}
+
 pub fn udf_timezone() -> ScalarUDF {
     let timezone = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -171,12 +229,17 @@ pub fn udf_timezone() -> ScalarUDF {
     )
 }
 
-fn udf_date(name: &str, format: &'static str) -> ScalarUDF {
+pub fn udf_time_format() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
             .downcast_ref::<array::StringArray>()
             .unwrap();
+        let format = &args[1]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
+        let format = format.value(0);
         let array = base
             .iter()
             .map(|x| {
@@ -194,46 +257,81 @@ fn udf_date(name: &str, format: &'static str) -> ScalarUDF {
 
     let date = make_scalar_function(date);
     create_udf(
-        name,
-        vec![DataType::Utf8],
+        "time_format",
+        vec![DataType::Utf8, DataType::Utf8],
         Arc::new(DataType::Utf8),
         Volatility::Immutable,
         date,
     )
 }
 
-pub fn udf_date_day() -> ScalarUDF {
-    udf_date("date_day", "%Y-%m-%d")
-}
-
-pub fn udf_date_month() -> ScalarUDF {
-    udf_date("date_month", "%Y-%m")
-}
-
-pub fn udf_active_days() -> AggregateUDF {
+pub fn udaf_active_days() -> AggregateUDF {
     create_udaf(
         "active_days",
         DataType::Utf8,
-        Arc::new(DataType::UInt32),
+        Arc::new(DataType::Int64),
         Volatility::Immutable,
         Arc::new(|| Ok(Box::new(ActiveDays::new()))),
-        Arc::new(vec![DataType::UInt32]),
+        Arc::new(vec![DataType::Int64]),
+    )
+}
+
+pub fn udaf_active_longest_count() -> AggregateUDF {
+    create_udaf(
+        "active_longest_count",
+        DataType::Utf8,
+        Arc::new(DataType::Int64),
+        Volatility::Immutable,
+        Arc::new(|| Ok(Box::new(ActiveLongestCount::new()))),
+        Arc::new(vec![DataType::List(Box::new(Field::new(
+            "item",
+            DataType::Int64,
+            true,
+        )))]),
+    )
+}
+
+pub fn udaf_active_longest_start() -> AggregateUDF {
+    create_udaf(
+        "active_longest_start",
+        DataType::Utf8,
+        Arc::new(DataType::Utf8),
+        Volatility::Immutable,
+        Arc::new(|| Ok(Box::new(ActiveLongestTime::new(ActiveLongestType::Start)))),
+        Arc::new(vec![DataType::List(Box::new(Field::new(
+            "item",
+            DataType::Int64,
+            true,
+        )))]),
+    )
+}
+
+pub fn udaf_active_longest_end() -> AggregateUDF {
+    create_udaf(
+        "active_longest_end",
+        DataType::Utf8,
+        Arc::new(DataType::Utf8),
+        Volatility::Immutable,
+        Arc::new(|| Ok(Box::new(ActiveLongestTime::new(ActiveLongestType::End)))),
+        Arc::new(vec![DataType::List(Box::new(Field::new(
+            "item",
+            DataType::Int64,
+            true,
+        )))]),
     )
 }
 
 #[derive(Debug)]
-struct ActiveDays {
+struct TimeInputAccumulator {
     data: Vec<i64>,
     n: i64,
 }
 
-impl ActiveDays {
-    pub fn new() -> Self {
+impl TimeInputAccumulator {
+    fn new() -> Self {
         Self { data: vec![], n: 0 }
     }
-}
 
-impl Accumulator for ActiveDays {
     fn state(&self) -> Result<Vec<ScalarValue>> {
         let mut values = Box::new(vec![]);
         for d in self.data.iter() {
@@ -244,60 +342,120 @@ impl Accumulator for ActiveDays {
         Ok(vec![values])
     }
 
+    fn gather(&mut self, states: &[ScalarValue]) {
+        for state in states {
+            if let ScalarValue::List(Some(values), _) = state {
+                for v in values.iter() {
+                    if let ScalarValue::Int64(i) = v {
+                        self.data.push(i.unwrap())
+                    }
+                }
+            };
+        }
+    }
+
     fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
         let value = &values[0];
         if let ScalarValue::Utf8(e) = value {
             e.iter()
                 .map(|v| {
-                    let s = DateTime::parse_from_rfc2822(v)
-                        .unwrap()
-                        .format("%Y-%m-%d")
-                        .to_string();
-                    self.days.insert(s);
+                    let ts = DateTime::parse_from_rfc2822(v).unwrap().timestamp();
+                    self.data.push(ts);
                 })
                 .collect()
         };
-        self.n = self.days.len() as u32;
         Ok(())
     }
 
-    fn merge(&mut self, states: &[ScalarValue]) -> Result<()> {
-        let state = &states[0];
-        if let ScalarValue::UInt32(Some(n)) = state {
-            self.n += n;
+    #[allow(dead_code)]
+    fn merge(&mut self, _: &[ScalarValue]) -> Result<()> {
+        panic!("implement me")
+    }
+
+    #[allow(dead_code)]
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        if states.is_empty() {
+            return Ok(());
         };
+        let mut data = vec![];
+        (0..states[0].len()).for_each(|index| {
+            let v = states
+                .iter()
+                .map(|array| ScalarValue::try_from_array(array, index))
+                .collect::<Result<Vec<_>>>()
+                .unwrap();
+            data.extend(v);
+        });
+
+        self.merge(&data)
+    }
+}
+
+#[derive(Debug)]
+struct ActiveDays {
+    tla: TimeInputAccumulator,
+}
+
+impl ActiveDays {
+    pub fn new() -> Self {
+        Self {
+            tla: TimeInputAccumulator::new(),
+        }
+    }
+}
+
+impl Accumulator for ActiveDays {
+    fn state(&self) -> Result<Vec<ScalarValue>> {
+        self.tla.state()
+    }
+
+    fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
+        self.tla.update(values)
+    }
+
+    fn merge(&mut self, states: &[ScalarValue]) -> Result<()> {
+        self.tla.gather(states);
+        let mut set: HashSet<String> = HashSet::new();
+        for v in self.tla.data.iter() {
+            let s = Utc.timestamp(*v, 0).format("%Y-%m-%d").to_string();
+            set.insert(s);
+        }
+
+        self.tla.n = set.len() as i64;
         Ok(())
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {
-        Ok(ScalarValue::from(self.n as u32))
+        Ok(ScalarValue::from(self.tla.n as i64))
     }
 }
 
-pub fn udf_active_longest() -> AggregateUDF {
-    create_udaf(
-        "active_longest",
-        DataType::Utf8,
-        Arc::new(DataType::Int64),
-        Volatility::Immutable,
-        Arc::new(|| Ok(Box::new(ActiveLongest::new()))),
-        Arc::new(vec![DataType::List(Box::new(Field::new(
-            "item",
-            DataType::Int64,
-            true,
-        )))]),
-    )
+enum ActiveLongestType {
+    Count,
+    Start,
+    End,
+}
+
+impl From<ActiveLongestType> for u8 {
+    fn from(t: ActiveLongestType) -> Self {
+        match t {
+            ActiveLongestType::Count => 0,
+            ActiveLongestType::Start => 1,
+            ActiveLongestType::End => 2,
+        }
+    }
 }
 
 #[derive(Debug)]
 struct ActiveLongest {
-    data: Vec<i64>,
-    n: i64,
+    tla: TimeInputAccumulator,
 }
 
 impl ActiveLongest {
     pub fn new() -> Self {
-        Self { data: vec![], n: 0 }
+        Self {
+            tla: TimeInputAccumulator::new(),
+        }
     }
 
     fn calc_longest(&self, data: &[i64], ratio: i64) -> (i64, i64, i64) {
@@ -338,107 +496,58 @@ impl ActiveLongest {
         }
     }
 
-    fn merge_index(&mut self, states: &[ScalarValue], index: u8) -> Result<()> {
+    fn merge_index<S: Into<u8>>(&mut self, states: &[ScalarValue], index: S) -> Result<()> {
         for state in states {
             if let ScalarValue::List(Some(values), _) = state {
                 for v in values.iter() {
                     if let ScalarValue::Int64(i) = v {
-                        self.data.push(i.unwrap())
+                        self.tla.data.push(i.unwrap())
                     }
                 }
             };
         }
 
-        self.data.sort_unstable();
-        let ret = self.calc_longest(&self.data, 3600 * 24);
-        match index {
-            0 => self.n = ret.0,
-            1 => self.n = ret.1,
-            2 => self.n = ret.2,
+        self.tla.data.sort_unstable();
+        let ret = self.calc_longest(&self.tla.data, 3600 * 24);
+        match index.into() {
+            0 => self.tla.n = ret.0,
+            1 => self.tla.n = ret.1,
+            2 => self.tla.n = ret.2,
             _ => (),
         }
         Ok(())
     }
 }
 
-impl Accumulator for ActiveLongest {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        let mut values = Box::new(vec![]);
-        for d in self.data.iter() {
-            values.push(ScalarValue::from(*d as i64))
-        }
+#[derive(Debug)]
+struct ActiveLongestCount {
+    al: ActiveLongest,
+}
 
-        let values = ScalarValue::List(Some(values), Box::new(DataType::Int64));
-        Ok(vec![values])
+impl ActiveLongestCount {
+    fn new() -> Self {
+        Self {
+            al: ActiveLongest::new(),
+        }
+    }
+}
+
+impl Accumulator for ActiveLongestCount {
+    fn state(&self) -> Result<Vec<ScalarValue>> {
+        self.al.tla.state()
     }
 
     fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
-        let value = &values[0];
-        if let ScalarValue::Utf8(e) = value {
-            e.iter()
-                .map(|v| {
-                    let ts = DateTime::parse_from_rfc2822(v).unwrap().timestamp();
-                    self.data.push(ts);
-                })
-                .collect()
-        };
-        Ok(())
+        self.al.tla.update(values)
     }
 
     fn merge(&mut self, states: &[ScalarValue]) -> Result<()> {
-        self.merge_index(states, 0)
-    }
-
-    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
-        if states.is_empty() {
-            return Ok(());
-        };
-        let mut data = vec![];
-        (0..states[0].len()).for_each(|index| {
-            let v = states
-                .iter()
-                .map(|array| ScalarValue::try_from_array(array, index))
-                .collect::<Result<Vec<_>>>()
-                .unwrap();
-            data.extend(v);
-        });
-
-        self.merge(&data)
+        self.al.merge_index(states, ActiveLongestType::Count)
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {
-        Ok(ScalarValue::from(self.n))
+        Ok(ScalarValue::from(self.al.tla.n))
     }
-}
-
-pub fn udf_active_longest_start() -> AggregateUDF {
-    create_udaf(
-        "active_longest_start",
-        DataType::Utf8,
-        Arc::new(DataType::Utf8),
-        Volatility::Immutable,
-        Arc::new(|| Ok(Box::new(ActiveLongestTime::new(1)))),
-        Arc::new(vec![DataType::List(Box::new(Field::new(
-            "item",
-            DataType::Int64,
-            true,
-        )))]),
-    )
-}
-
-pub fn udf_active_longest_end() -> AggregateUDF {
-    create_udaf(
-        "active_longest_end",
-        DataType::Utf8,
-        Arc::new(DataType::Utf8),
-        Volatility::Immutable,
-        Arc::new(|| Ok(Box::new(ActiveLongestTime::new(2)))),
-        Arc::new(vec![DataType::List(Box::new(Field::new(
-            "item",
-            DataType::Int64,
-            true,
-        )))]),
-    )
 }
 
 #[derive(Debug)]
@@ -448,21 +557,21 @@ struct ActiveLongestTime {
 }
 
 impl ActiveLongestTime {
-    fn new(index: u8) -> Self {
+    fn new<I: Into<u8>>(index: I) -> Self {
         Self {
             al: ActiveLongest::new(),
-            index,
+            index: index.into(),
         }
     }
 }
 
 impl Accumulator for ActiveLongestTime {
     fn state(&self) -> Result<Vec<ScalarValue>> {
-        self.al.state()
+        self.al.tla.state()
     }
 
     fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
-        self.al.update(values)
+        self.al.tla.update(values)
     }
 
     fn merge(&mut self, states: &[ScalarValue]) -> Result<()> {
@@ -470,7 +579,7 @@ impl Accumulator for ActiveLongestTime {
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {
-        let s = Utc.timestamp(self.al.n, 0) + Duration::days(1);
+        let s = Utc.timestamp(self.al.tla.n, 0) + Duration::days(1);
         let s = s.format("%Y-%m-%d").to_string();
         Ok(ScalarValue::from(s.as_str()))
     }

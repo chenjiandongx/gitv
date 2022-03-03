@@ -21,4 +21,4 @@ chrono = "0.4"
 github-rs = "0.7"
 serde_json = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
-
+humantime = "2"

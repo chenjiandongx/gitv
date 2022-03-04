@@ -20,7 +20,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 lazy_static! {
-    pub(crate) static ref UDFS: Vec<fn() -> ScalarUDF> = vec![
+    static ref UDFS: Vec<fn() -> ScalarUDF> = vec![
         udf_year,
         udf_month,
         udf_weekday,
@@ -30,7 +30,7 @@ lazy_static! {
         udf_duration,
         udf_time_format,
     ];
-    pub(crate) static ref UDAFS: Vec<fn() -> AggregateUDF> = vec![
+    static ref UDAFS: Vec<fn() -> AggregateUDF> = vec![
         udaf_active_days,
         udaf_active_longest_count,
         udaf_active_longest_start,
@@ -38,7 +38,22 @@ lazy_static! {
     ];
 }
 
-pub fn udf_year() -> ScalarUDF {
+pub fn create_execution_context() -> ExecutionContext {
+    let mut ctx = ExecutionContext::new();
+    for udf in UDFS.iter() {
+        ctx.register_udf(udf());
+    }
+    for udaf in UDAFS.iter() {
+        ctx.register_udaf(udaf())
+    }
+    ctx
+}
+
+/// udf_year 计算给定时间的年份
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: 2021
+fn udf_year() -> ScalarUDF {
     let year = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -62,7 +77,11 @@ pub fn udf_year() -> ScalarUDF {
     )
 }
 
-pub fn udf_month() -> ScalarUDF {
+/// udf_year 计算给定时间的月份
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: 11
+fn udf_month() -> ScalarUDF {
     let month = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -86,7 +105,11 @@ pub fn udf_month() -> ScalarUDF {
     )
 }
 
-pub fn udf_weekday() -> ScalarUDF {
+/// udf_year 计算给定时间的月份
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: "Mon"
+fn udf_weekday() -> ScalarUDF {
     let weekday = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -117,7 +140,11 @@ pub fn udf_weekday() -> ScalarUDF {
     )
 }
 
-pub fn udf_hour() -> ScalarUDF {
+/// udf_year 计算给定时间的小时数
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: 15
+fn udf_hour() -> ScalarUDF {
     let hour = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -141,7 +168,11 @@ pub fn udf_hour() -> ScalarUDF {
     )
 }
 
-pub fn udf_timestamp() -> ScalarUDF {
+/// udf_year 计算给定时间的 Unix 时间戳
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: 1636960758
+fn udf_timestamp() -> ScalarUDF {
     let timestamp = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -171,7 +202,11 @@ pub fn udf_timestamp() -> ScalarUDF {
     )
 }
 
-pub fn udf_duration() -> ScalarUDF {
+/// udf_year 计算给定时间到现在时间的长度
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: "30hours 2minutes"
+fn udf_duration() -> ScalarUDF {
     let duration = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -198,7 +233,11 @@ pub fn udf_duration() -> ScalarUDF {
     )
 }
 
-pub fn udf_timezone() -> ScalarUDF {
+/// udf_year 计算给定时间的时区
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: "+08:00"
+fn udf_timezone() -> ScalarUDF {
     let timezone = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -229,7 +268,11 @@ pub fn udf_timezone() -> ScalarUDF {
     )
 }
 
-pub fn udf_time_format() -> ScalarUDF {
+/// udf_year 格式化时间
+///
+/// input<arg1: rfc2822, arg2: String>: ("Mon, 15 Nov 2021 15:19:18 +0800", "%Y-%m-%d %H:%M:%S")
+/// output: "2021-11-15 15:19:18"
+fn udf_time_format() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
         let base = &args[0]
             .as_any()
@@ -265,7 +308,11 @@ pub fn udf_time_format() -> ScalarUDF {
     )
 }
 
-pub fn udaf_active_days() -> AggregateUDF {
+/// udaf_active_days 计算某天 commits 数量
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: n
+fn udaf_active_days() -> AggregateUDF {
     create_udaf(
         "active_days",
         DataType::Utf8,
@@ -276,7 +323,11 @@ pub fn udaf_active_days() -> AggregateUDF {
     )
 }
 
-pub fn udaf_active_longest_count() -> AggregateUDF {
+/// udaf_active_longest_count 计算最大连续多少天有提交记录
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: n
+fn udaf_active_longest_count() -> AggregateUDF {
     create_udaf(
         "active_longest_count",
         DataType::Utf8,
@@ -291,7 +342,11 @@ pub fn udaf_active_longest_count() -> AggregateUDF {
     )
 }
 
-pub fn udaf_active_longest_start() -> AggregateUDF {
+/// udaf_active_longest_count 计算最大连续提交天数的起始时间
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: "2020-01-02"
+fn udaf_active_longest_start() -> AggregateUDF {
     create_udaf(
         "active_longest_start",
         DataType::Utf8,
@@ -306,7 +361,11 @@ pub fn udaf_active_longest_start() -> AggregateUDF {
     )
 }
 
-pub fn udaf_active_longest_end() -> AggregateUDF {
+/// udaf_active_longest_count 计算最大连续提交天数的结束时间
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: "2020-01-05"
+fn udaf_active_longest_end() -> AggregateUDF {
     create_udaf(
         "active_longest_end",
         DataType::Utf8,
@@ -458,6 +517,9 @@ impl ActiveLongest {
         }
     }
 
+    /// calc_longest 计算提交持续天数的数量以及起止时间
+    ///
+    /// 采用双指针算法，时间复杂度 O(N)
     fn calc_longest(&self, data: &[i64], ratio: i64) -> (i64, i64, i64) {
         if data.is_empty() {
             return (0, 0, 0);

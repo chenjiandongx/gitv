@@ -1,27 +1,21 @@
-use crate::config;
-use crate::git_impl::Repository;
 use crate::repo_syncer::RepoSyncer;
+use crate::{config, Repository};
 use anyhow::Result;
 use async_trait::*;
 use serde::Deserialize;
 use std::path::Path;
-
-// `github` subcommand
-// args:
-// 1) -v --visibility
-// 2) -a --affiliation
-// 3) -i --include-org
-// 4) -p --path
 
 pub struct GithubRepoSyncer<'a> {
     api: &'static str,
     pub opts: &'a config::Github,
 }
 
+const GITHUB_API: &str = "https://api.github.com/user/repos";
+
 impl<'a> GithubRepoSyncer<'a> {
     pub fn new(opt: &'a config::Github) -> Self {
         Self {
-            api: "https://api.github.com/user/repos",
+            api: GITHUB_API,
             opts: opt,
         }
     }
@@ -39,12 +33,14 @@ impl<'a> RepoSyncer for GithubRepoSyncer<'a> {
         let mut finish = false;
         let mut page: u16 = 1;
         let mut repos = vec![];
+        let visibility = self.opts.visibility.clone().unwrap_or_default();
+        let affiliation = self.opts.affiliation.clone().unwrap_or_default();
         while !finish {
             let params = [
                 ("per_page", "100"),
                 ("page", &page.to_string()),
-                ("visibility", &self.opts.visibility),
-                ("affiliation", &self.opts.affiliation),
+                ("visibility", visibility.as_str()),
+                ("affiliation", affiliation.as_str()),
             ];
 
             let response = reqwest::Client::new()
@@ -63,7 +59,10 @@ impl<'a> RepoSyncer for GithubRepoSyncer<'a> {
                 finish = true
             }
 
-            let orgs: Vec<&str> = self.opts.exclude_org.split(',').map(|x| x.trim()).collect();
+            let orgs = match &self.opts.exclude_org {
+                Some(orgs) => orgs.split(',').map(|x| x.trim()).collect(),
+                None => vec![],
+            };
             for repo in response {
                 let mut ignore = false;
                 for org in orgs.iter() {
@@ -76,7 +75,7 @@ impl<'a> RepoSyncer for GithubRepoSyncer<'a> {
                     let name = repo.full_name;
                     repos.push(Repository {
                         name: name.clone(),
-                        branches: None,
+                        branch: None,
                         remote: repo.clone_url,
                         path: Path::new(&self.opts.path.clone())
                             .join(Path::new(&name))

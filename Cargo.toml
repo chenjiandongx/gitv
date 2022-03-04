@@ -18,7 +18,7 @@ async-trait = "0.1"
 async-process = "1"
 futures = "0.3"
 chrono = "0.4"
-github-rs = "0.7"
 serde_json = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 humantime = "2"
+clap = { version = "3.1.5", features = ["derive"] }

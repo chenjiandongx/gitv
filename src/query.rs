@@ -29,7 +29,6 @@ async fn exec(query: &config::Query, ctx: &mut ExecutionContext) -> Result<Colum
     };
 
     let df = ctx.sql(&query.sql).await?;
-    df.show().await;
     for val in df.collect().await? {
         if val.num_rows() == 0 {
             continue;

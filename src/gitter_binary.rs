@@ -1,5 +1,6 @@
 use crate::config::AuthorMapping;
-use crate::git_impl::*;
+use crate::gitter::*;
+use crate::Repository;
 use anyhow::{Error, Result};
 use async_process::Command;
 use async_trait::async_trait;
@@ -219,18 +220,11 @@ impl Parse {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct GitBinaryImpl;
 
 #[async_trait]
-impl GitImpl for GitBinaryImpl {
-    async fn clone(&self, repo: &Repository) -> Result<()> {
-        GitExecutable::git_clone(repo).await
-    }
-
-    async fn pull(&self, repo: &Repository) -> Result<()> {
-        GitExecutable::git_pull(repo).await
-    }
-
+impl Gitter for GitBinaryImpl {
     async fn clone_or_pull(&self, repos: Vec<Repository>) -> Result<()> {
         let mut handles = vec![];
         for repo in repos {

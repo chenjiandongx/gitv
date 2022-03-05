@@ -47,6 +47,24 @@ pub struct Database {
 }
 
 impl Database {
+    pub fn load(&self) -> Result<Vec<Repository>> {
+        let mut repos = vec![];
+        if self.repos.is_some() {
+            repos.extend(self.repos.clone().unwrap());
+        }
+
+        if self.files.is_some() {
+            for file in self.files.clone().unwrap() {
+                let f = File::open(&file)?;
+                let r: Vec<Repository> = serde_yaml::from_reader(f)?;
+                repos.extend(r);
+            }
+        }
+        Ok(repos)
+    }
+}
+
+impl Database {
     pub fn location(&self, ext: String) -> String {
         let p = Path::new(self.path.as_str()).join(format!(
             "{}.{}",
@@ -58,15 +76,17 @@ impl Database {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct SyncAction {
+pub struct FetchAction {
     pub github: Option<Vec<Github>>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Github {
-    pub path: String,
+    pub base_dir: String,
+    pub output: String,
     pub token: String,
-    pub exclude_org: Option<String>,
+    pub exclude_orgs: Option<Vec<String>>,
+    pub exclude_repos: Option<Vec<String>>,
     pub visibility: Option<String>,
     pub affiliation: Option<String>,
 }
@@ -104,11 +124,11 @@ pub struct Chart {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
     pub init: InitAction,
-    pub sync: SyncAction,
+    pub fetch: FetchAction,
     pub render: RenderAction,
 }
 
-pub fn load_config(c: &'static str) -> Result<Config> {
+pub fn load_config(c: &str) -> Result<Config> {
     let f = File::open(c)?;
     let config: Config = serde_yaml::from_reader(f)?;
     Ok(config)

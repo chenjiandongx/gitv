@@ -7,6 +7,8 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 use std::{collections::HashMap, fs, path::Path};
+use tokio::time;
+use tracing::info;
 
 lazy_static! {
     static ref COMMIT_INFO_REGEXP: regex::Regex =
@@ -230,10 +232,21 @@ impl Gitter for GitBinaryImpl {
         for repo in repos {
             let repo = repo.clone();
             let handle = tokio::spawn(async move {
+                let now = time::Instant::now();
                 if Path::new(&repo.path).exists() {
-                    GitExecutable::git_pull(&repo).await
+                    GitExecutable::git_pull(&repo).await.unwrap();
+                    info!(
+                        "git pull elapsed {:#?}, repo {}",
+                        now.elapsed(),
+                        &repo.remote
+                    )
                 } else {
-                    GitExecutable::git_clone(&repo).await
+                    GitExecutable::git_clone(&repo).await.unwrap();
+                    info!(
+                        "git clone elapsed {:#?}, repo {}",
+                        now.elapsed(),
+                        &repo.remote
+                    )
                 }
             });
             handles.push(handle);

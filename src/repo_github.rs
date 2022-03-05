@@ -1,40 +1,27 @@
-use crate::repo_syncer::RepoSyncer;
 use crate::{config, Repository};
 use anyhow::Result;
-use async_trait::*;
 use serde::Deserialize;
 use std::path::Path;
 
-pub struct GithubRepoSyncer<'a> {
-    api: &'static str,
-    pub opts: &'a config::Github,
-}
+pub(crate) struct GithubRepoFetcher;
 
-const GITHUB_API: &str = "https://api.github.com/user/repos";
-
-impl<'a> GithubRepoSyncer<'a> {
-    pub fn new(opt: &'a config::Github) -> Self {
-        Self {
-            api: GITHUB_API,
-            opts: opt,
-        }
-    }
-}
+static GITHUB_API: &str = "https://api.github.com/user/repos";
 
 #[derive(Debug, Deserialize)]
 struct RepoResponse {
     full_name: String,
     clone_url: String,
+    default_branch: String,
 }
 
-#[async_trait]
-impl<'a> RepoSyncer for GithubRepoSyncer<'a> {
-    async fn repositories(&self) -> Result<Vec<Repository>> {
+impl GithubRepoFetcher {
+    pub async fn repositories(opts: &config::Github) -> Result<Vec<Repository>> {
         let mut finish = false;
         let mut page: u16 = 1;
         let mut repos = vec![];
-        let visibility = self.opts.visibility.clone().unwrap_or_default();
-        let affiliation = self.opts.affiliation.clone().unwrap_or_default();
+        let visibility = opts.visibility.clone().unwrap_or_default();
+        let affiliation = opts.affiliation.clone().unwrap_or_default();
+
         while !finish {
             let params = [
                 ("per_page", "100"),
@@ -44,9 +31,9 @@ impl<'a> RepoSyncer for GithubRepoSyncer<'a> {
             ];
 
             let response = reqwest::Client::new()
-                .get(self.api)
+                .get(GITHUB_API)
                 .query(&params)
-                .bearer_auth(&self.opts.token)
+                .bearer_auth(&opts.token)
                 .header("User-Agent", "rust/reqwest")
                 .header("Accept", "application/vnd.github.v3+json")
                 .send()
@@ -59,25 +46,30 @@ impl<'a> RepoSyncer for GithubRepoSyncer<'a> {
                 finish = true
             }
 
-            let orgs = match &self.opts.exclude_org {
-                Some(orgs) => orgs.split(',').map(|x| x.trim()).collect(),
-                None => vec![],
-            };
+            let exclude_orgs = opts.exclude_orgs.clone().unwrap_or_default();
+            let exclude_repos = opts.exclude_repos.clone().unwrap_or_default();
             for repo in response {
                 let mut ignore = false;
-                for org in orgs.iter() {
-                    if repo.full_name.starts_with(org) {
+                for excluded in exclude_orgs.iter() {
+                    if repo.full_name.starts_with(excluded) {
                         ignore = true;
                         break;
                     }
                 }
+                for excluded in exclude_repos.iter() {
+                    if repo.full_name.starts_with(excluded) {
+                        ignore = true;
+                        break;
+                    }
+                }
+
                 if !ignore {
                     let name = repo.full_name;
                     repos.push(Repository {
                         name: name.clone(),
-                        branch: None,
+                        branch: Some(repo.default_branch),
                         remote: repo.clone_url,
-                        path: Path::new(&self.opts.path.clone())
+                        path: Path::new(&opts.base_dir.clone())
                             .join(Path::new(&name))
                             .to_str()
                             .unwrap()

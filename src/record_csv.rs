@@ -12,56 +12,57 @@ async fn persist_records<T: Gitter>(
 ) -> Result<()> {
     // TODO(optimize): 判断文件是否存在 或者有多种文件创建模式可选？
     let uri = database.location(ext);
-    let mut wtr = csv::Writer::from_path(Path::new(uri.as_str())).unwrap();
+    let mut wtr = csv::Writer::from_path(Path::new(uri.as_str()))?;
 
-    if let Some(repos) = &database.repos {
-        for repo in repos {
-            let branch = gitter.current_branch(repo).await.unwrap_or_default();
-            let commits = gitter.commits(repo, author_mappings.clone()).await;
-            if let Ok(commits) = commits {
-                for commit in commits {
-                    let domain = commit.author.domain();
-                    let common_record = Record {
-                        repo_name: repo.name.clone(),
-                        branch: branch.clone(),
-                        datetime: commit.datetime,
-                        author_name: commit.author.name,
-                        author_email: commit.author.email,
-                        author_domain: domain,
-                        ..Default::default()
-                    };
+    let repos = database.load()?;
+    gitter.clone_or_pull(repos.clone()).await?;
 
-                    let mut commit_record = common_record.clone();
-                    commit_record.metric = RECORD_COMMIT.to_string();
-                    wtr.serialize(commit_record)?;
+    for repo in &database.load().unwrap() {
+        let branch = gitter.current_branch(repo).await.unwrap_or_default();
+        let commits = gitter.commits(repo, author_mappings.clone()).await;
+        if let Ok(commits) = commits {
+            for commit in commits {
+                let domain = commit.author.domain();
+                let common_record = Record {
+                    repo_name: repo.name.clone(),
+                    branch: branch.clone(),
+                    datetime: commit.datetime,
+                    author_name: commit.author.name,
+                    author_email: commit.author.email,
+                    author_domain: domain,
+                    ..Default::default()
+                };
 
-                    for fc in commit.changes {
-                        let mut record = common_record.clone();
-                        record.metric = RECORD_CHANGE.to_string();
-                        record.ext = fc.ext;
-                        record.insertion = fc.insertion;
-                        record.deletion = fc.deletion;
-                        wtr.serialize(record)?;
-                    }
-                }
-            }
-            wtr.flush()?;
+                let mut commit_record = common_record.clone();
+                commit_record.metric = RECORD_COMMIT.to_string();
+                wtr.serialize(commit_record)?;
 
-            let tag_stats = gitter.tags(repo, author_mappings.clone()).await;
-            if let Ok(tag_stats) = tag_stats {
-                for tag_stat in tag_stats {
-                    let record = Record {
-                        metric: RECORD_TAG.to_string(),
-                        repo_name: repo.name.clone(),
-                        datetime: tag_stat.datetime,
-                        tag: tag_stat.tag,
-                        ..Default::default()
-                    };
+                for fc in commit.changes {
+                    let mut record = common_record.clone();
+                    record.metric = RECORD_CHANGE.to_string();
+                    record.ext = fc.ext;
+                    record.insertion = fc.insertion;
+                    record.deletion = fc.deletion;
                     wtr.serialize(record)?;
                 }
             }
-            wtr.flush()?;
         }
+        wtr.flush()?;
+
+        let tag_stats = gitter.tags(repo, author_mappings.clone()).await;
+        if let Ok(tag_stats) = tag_stats {
+            for tag_stat in tag_stats {
+                let record = Record {
+                    metric: RECORD_TAG.to_string(),
+                    repo_name: repo.name.clone(),
+                    datetime: tag_stat.datetime,
+                    tag: tag_stat.tag,
+                    ..Default::default()
+                };
+                wtr.serialize(record)?;
+            }
+        }
+        wtr.flush()?;
     }
 
     Ok(())
@@ -93,16 +94,18 @@ impl<T: 'static + Gitter + Clone> RecordSerializer for CsvSerializer<T> {
             let author_mappings = config.author_mappings.clone();
 
             let handle = tokio::spawn(async move {
-                let _ = persist_records(
+                persist_records(
                     gitter,
                     extension,
                     database,
                     author_mappings.unwrap_or_default(),
                 )
-                .await;
+                .await
+                .unwrap();
             });
             handles.push(handle);
         }
+        futures::future::join_all(handles).await;
         Ok(())
     }
 }

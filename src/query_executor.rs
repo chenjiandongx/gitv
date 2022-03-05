@@ -1,3 +1,4 @@
+use crate::config;
 use chrono::{prelude::*, Duration};
 use datafusion::{
     arrow::{
@@ -38,15 +39,24 @@ lazy_static! {
     ];
 }
 
-pub fn create_execution_context() -> ExecutionContext {
-    let mut ctx = ExecutionContext::new();
-    for udf in UDFS.iter() {
-        ctx.register_udf(udf());
+pub struct Executor;
+
+impl Executor {
+    pub async fn create_context(config: Vec<config::Load>) -> Result<ExecutionContext> {
+        let mut ctx = ExecutionContext::new();
+        for udf in UDFS.iter() {
+            ctx.register_udf(udf());
+        }
+        for udaf in UDAFS.iter() {
+            ctx.register_udaf(udaf())
+        }
+
+        for c in config {
+            ctx.register_csv(&c.table_name, &c.file, CsvReadOptions::new())
+                .await?;
+        }
+        Ok(ctx)
     }
-    for udaf in UDAFS.iter() {
-        ctx.register_udaf(udaf())
-    }
-    ctx
 }
 
 /// udf_year 计算给定时间的年份

@@ -39,7 +39,7 @@ impl Author {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Database {
     pub table_name: String,
-    pub path: String,
+    pub base_dir: String,
     pub source: String,
     pub files: Option<Vec<String>>,
     pub repos: Option<Vec<Repository>>,
@@ -65,7 +65,7 @@ impl Database {
 
 impl Database {
     pub fn location(&self, ext: String) -> String {
-        let p = Path::new(self.path.as_str()).join(format!(
+        let p = Path::new(self.base_dir.as_str()).join(format!(
             "{}.{}",
             self.table_name.clone(),
             ext.as_str()
@@ -97,6 +97,17 @@ pub struct RenderAction {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+pub struct ShellAction {
+    pub load: Option<Vec<Load>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Load {
+    pub table_name: String,
+    pub file: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ChartOptions {
     #[serde(rename(deserialize = "backgroundColor"))]
     pub background_color: Option<String>,
@@ -124,6 +135,7 @@ pub struct Chart {
 pub struct Config {
     pub init: InitAction,
     pub fetch: FetchAction,
+    pub shell: ShellAction,
     pub render: RenderAction,
 }
 

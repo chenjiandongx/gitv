@@ -1,5 +1,5 @@
 use crate::{config::AuthorMapping, gitter::*, Repository};
-use anyhow::{Error, Result};
+use anyhow::{anyhow, Result};
 use async_process::Command;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
@@ -70,10 +70,6 @@ impl GitExecutable {
         }
     }
 
-    async fn git_branch(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
-        Self::git(repo, "branch", args, '\n').await
-    }
-
     async fn git_log(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
         Self::git(repo, "log", args, '\n').await
     }
@@ -101,7 +97,7 @@ impl Parse {
     ) -> Result<()> {
         let caps = COMMIT_INFO_REGEXP.captures(line);
         if caps.is_none() {
-            return Err(Error::msg(format!("invalid commit format: {}", line)));
+            return Err(anyhow!("Invalid commit format: {}", line));
         };
 
         let caps = caps.unwrap();
@@ -142,7 +138,7 @@ impl Parse {
             let mut change = FileExtChange::default();
             let caps = COMMIT_CHANGE_REGEXP.captures(line.as_str());
             if caps.is_none() {
-                return Err(Error::msg(format!("invalid change format: {}", line)));
+                return Err(anyhow!("Invalid change format: {}", line));
             }
 
             let caps = caps.unwrap();
@@ -237,9 +233,11 @@ impl Gitter for GitBinaryImpl {
         let mut handles = vec![];
         let mutex = Arc::new(Mutex::new(0));
         let total = repos.len();
+
         for repo in repos {
             let repo = repo.clone();
             let mutex = mutex.clone();
+
             let handle = tokio::spawn(async move {
                 let now = time::Instant::now();
                 if Path::new(&repo.path).exists() {
@@ -281,7 +279,7 @@ impl Gitter for GitBinaryImpl {
         if repo.branch.is_some() {
             let branch = repo.branch.clone().unwrap();
             if !branch.is_empty() {
-                GitExecutable::git_checkout(repo, &[branch.as_str()]).await;
+                GitExecutable::git_checkout(repo, &[&branch]).await?;
             }
         }
         Ok(())
@@ -332,16 +330,16 @@ impl Gitter for GitBinaryImpl {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<Vec<TagStats>> {
-        let stats: Vec<TagStats> = vec![];
-        let mutex = Arc::new(tokio::sync::Mutex::new(stats));
-        let lines = GitExecutable::git_show_ref(repo, &["--tags"]).await?;
+        let mutex = Arc::new(tokio::sync::Mutex::new(vec![]));
         let mut handles = vec![];
 
+        let lines = GitExecutable::git_show_ref(repo, &["--tags"]).await?;
         for line in lines {
             let fields: Vec<String> = line.splitn(2, ' ').map(|x| x.to_string()).collect();
             if fields.len() < 2 {
                 continue;
             }
+
             let lock = mutex.clone();
             let repo = repo.clone();
             let author_mappings = author_mappings.clone();
@@ -379,10 +377,10 @@ impl Gitter for GitBinaryImpl {
             });
             handles.push(handle)
         }
+
         for handle in handles {
             handle.await.unwrap();
         }
-
         let s = mutex.lock().await;
         Ok(s.to_vec())
     }

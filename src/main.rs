@@ -3,53 +3,26 @@ mod config;
 mod gitter;
 mod gitter_binary;
 mod query;
-mod query_functions;
+mod query_executor;
 mod record;
 mod record_csv;
 mod repo_fetcher;
 mod repo_github;
+mod shell;
 
 use crate::{record_csv::CsvSerializer, repo_fetcher::RepoFetcher};
 use anyhow::Result;
 use chrono::Local;
-use clap::{Args, Parser, Subcommand};
+use clap::Parser;
 use config::*;
-use datafusion::prelude::*;
 use gitter::*;
 use gitter_binary::*;
-use query_functions::*;
+use query_executor::*;
 use record::*;
-use serde::{Deserialize, Serialize};
-use std::{io, time, time::Duration};
-use tracing::Level;
+use std::io;
+use std::process::exit;
+use tracing::*;
 use tracing_subscriber::fmt::{format::Writer, time::FormatTime};
-
-#[derive(Debug, Parser)]
-#[clap(author, version, about, long_about = None)]
-struct Cli {
-    /// init flag
-    #[clap(short, long)]
-    init: bool,
-
-    /// sync flag
-    #[clap(short, long)]
-    fetch: bool,
-
-    /// render flag
-    #[clap(short, long)]
-    render: bool,
-
-    /// shell flag
-    #[clap(short = 'S', long)]
-    shell: bool,
-
-    /// docs here
-    path: String,
-}
-
-struct App {
-    // github_fechter
-}
 
 struct LocalTimer;
 
@@ -73,12 +46,34 @@ fn setup_logger() {
         .init();
 }
 
+#[derive(Debug, Parser)]
+#[clap(author, version, about, long_about = None)]
+struct Cli {
+    /// init flag
+    #[clap(short, long)]
+    init: bool,
+
+    /// sync flag
+    #[clap(short, long)]
+    fetch: bool,
+
+    /// render flag
+    #[clap(short, long)]
+    render: bool,
+
+    /// shell flag
+    #[clap(short, long)]
+    shell: bool,
+
+    /// docs here
+    path: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     setup_logger();
-    let cli: Cli = Cli::parse();
-    println!("path: {}", cli.path);
 
+    let cli: Cli = Cli::parse();
     let c: Config = config::load_config(&cli.path).unwrap();
 
     if cli.fetch {
@@ -89,5 +84,17 @@ async fn main() -> Result<()> {
         let serializer = CsvSerializer::new(GitBinaryImpl);
         serializer.serialize(c.init.clone()).await?
     }
+    if cli.shell {
+        let config = match c.shell.load {
+            Some(c) => c,
+            None => {
+                error!("No load config found");
+                exit(1)
+            }
+        };
+        let ctx = Executor::create_context(config).await?;
+        shell::console_loop(ctx).await?;
+    }
+
     Ok(())
 }

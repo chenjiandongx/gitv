@@ -15,12 +15,12 @@ struct RepoResponse {
 }
 
 impl GithubRepoFetcher {
-    pub async fn repositories(opts: &config::Github) -> Result<Vec<Repository>> {
+    pub async fn repositories(config: &config::Github) -> Result<Vec<Repository>> {
         let mut finish = false;
         let mut page: u16 = 1;
         let mut repos = vec![];
-        let visibility = opts.visibility.clone().unwrap_or_default();
-        let affiliation = opts.affiliation.clone().unwrap_or_default();
+        let visibility = config.visibility.clone().unwrap_or_default();
+        let affiliation = config.affiliation.clone().unwrap_or_default();
 
         while !finish {
             let params = [
@@ -33,7 +33,7 @@ impl GithubRepoFetcher {
             let response = reqwest::Client::new()
                 .get(GITHUB_API)
                 .query(&params)
-                .bearer_auth(&opts.token)
+                .bearer_auth(&config.token)
                 .header("User-Agent", "rust/reqwest")
                 .header("Accept", "application/vnd.github.v3+json")
                 .send()
@@ -46,8 +46,8 @@ impl GithubRepoFetcher {
                 finish = true
             }
 
-            let exclude_orgs = opts.exclude_orgs.clone().unwrap_or_default();
-            let exclude_repos = opts.exclude_repos.clone().unwrap_or_default();
+            let exclude_orgs = config.exclude_orgs.clone().unwrap_or_default();
+            let exclude_repos = config.exclude_repos.clone().unwrap_or_default();
             for repo in response {
                 let mut ignore = false;
                 for excluded in exclude_orgs.iter() {
@@ -69,7 +69,7 @@ impl GithubRepoFetcher {
                         name: name.clone(),
                         branch: Some(repo.default_branch),
                         remote: repo.clone_url,
-                        path: Path::new(&opts.base_dir.clone())
+                        path: Path::new(&config.base_dir.clone())
                             .join(Path::new(&name))
                             .to_str()
                             .unwrap()

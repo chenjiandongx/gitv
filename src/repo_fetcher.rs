@@ -21,12 +21,12 @@ impl RepoFetcher {
         info!("start to fetch github repos...");
         let now = time::Instant::now();
         let mut handles = vec![];
-        for opt in self.opts.github.clone().unwrap_or_default() {
+        for config in self.opts.github.clone().unwrap_or_default() {
             let handle = tokio::spawn(async move {
-                let repos = GithubRepoFetcher::repositories(&opt).await.unwrap();
-                let f = File::create(&opt.output).unwrap();
+                let repos = GithubRepoFetcher::repositories(&config).await.unwrap();
+                let f = File::create(&config.output).unwrap();
                 serde_yaml::to_writer(f, &repos).unwrap();
-                info!("save database file '{}'", &opt.output);
+                info!("save database file '{}'", &config.output);
             });
             handles.push(handle);
         }

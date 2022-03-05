@@ -1,7 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::path::Path;
+use std::{fs::File, path::Path};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct InitAction {

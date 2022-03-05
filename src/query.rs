@@ -1,8 +1,9 @@
 use crate::config;
 use anyhow::Result;
-use datafusion::arrow::array;
-use datafusion::arrow::datatypes::DataType;
-use datafusion::prelude::ExecutionContext;
+use datafusion::{
+    arrow::{array, datatypes::DataType},
+    prelude::ExecutionContext,
+};
 
 #[derive(Debug)]
 pub struct LabelsColumn {

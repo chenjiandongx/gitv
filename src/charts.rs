@@ -1,9 +1,10 @@
 use crate::config;
 use anyhow::Result;
 use serde::Serialize;
-use std::fs::File;
-use std::io::copy;
-use std::io::Cursor;
+use std::{
+    fs::File,
+    io::{copy, Cursor},
+};
 
 #[derive(Debug, Serialize)]
 pub struct Dataset {

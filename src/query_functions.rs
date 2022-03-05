@@ -1,23 +1,23 @@
-use chrono::prelude::*;
-use chrono::Duration;
-use datafusion::arrow::array::ArrayRef;
-use datafusion::arrow::datatypes::Field;
-use datafusion::logical_plan::create_udaf;
-use datafusion::physical_plan::udaf::AggregateUDF;
-use datafusion::physical_plan::Accumulator;
-use datafusion::scalar::ScalarValue;
+use chrono::{prelude::*, Duration};
 use datafusion::{
-    arrow::{array, datatypes::DataType},
+    arrow::{
+        array,
+        array::ArrayRef,
+        datatypes::{DataType, Field},
+    },
     error::Result,
+    logical_plan::create_udaf,
     physical_plan::{
         functions::{make_scalar_function, Volatility},
+        udaf::AggregateUDF,
         udf::ScalarUDF,
+        Accumulator,
     },
     prelude::*,
+    scalar::ScalarValue,
 };
 use lazy_static::lazy_static;
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 lazy_static! {
     static ref UDFS: Vec<fn() -> ScalarUDF> = vec![

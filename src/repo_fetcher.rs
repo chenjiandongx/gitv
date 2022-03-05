@@ -1,5 +1,4 @@
-use crate::config;
-use crate::repo_github::GithubRepoFetcher;
+use crate::{config, repo_github::GithubRepoFetcher};
 use anyhow::Result;
 use std::fs::File;
 use tokio::time;
@@ -31,7 +30,9 @@ impl RepoFetcher {
             });
             handles.push(handle);
         }
-        futures::future::join_all(handles).await;
+        for handle in handles {
+            handle.await.unwrap();
+        }
 
         info!(
             "all github repositories have been fetched, elapsed: {:#?}",

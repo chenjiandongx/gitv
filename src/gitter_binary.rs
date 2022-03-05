@@ -1,13 +1,15 @@
-use crate::config::AuthorMapping;
-use crate::gitter::*;
-use crate::Repository;
+use crate::{config::AuthorMapping, gitter::*, Repository};
 use anyhow::{Error, Result};
 use async_process::Command;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use std::sync::Arc;
-use std::{collections::HashMap, fs, path::Path};
-use tokio::time;
+use std::{
+    collections::HashMap,
+    fs,
+    path::Path,
+    sync::{Arc, Mutex},
+    time,
+};
 use tracing::info;
 
 lazy_static! {
@@ -82,6 +84,10 @@ impl GitExecutable {
 
     async fn git_ls_tree(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
         Self::git(repo, "ls-tree", args, '\u{0}').await
+    }
+
+    async fn git_checkout(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        Self::git(repo, "checkout", args, '\u{0}').await
     }
 }
 
@@ -229,29 +235,55 @@ pub struct GitBinaryImpl;
 impl Gitter for GitBinaryImpl {
     async fn clone_or_pull(&self, repos: Vec<Repository>) -> Result<()> {
         let mut handles = vec![];
+        let mutex = Arc::new(Mutex::new(0));
+        let total = repos.len();
         for repo in repos {
             let repo = repo.clone();
+            let mutex = mutex.clone();
             let handle = tokio::spawn(async move {
                 let now = time::Instant::now();
                 if Path::new(&repo.path).exists() {
                     GitExecutable::git_pull(&repo).await.unwrap();
+                    let mut lock = mutex.lock().unwrap();
+                    *lock += 1;
+                    let n = *lock;
                     info!(
-                        "git pull elapsed {:#?}, repo {}",
+                        "[{}/{}] git pull: elapsed {:#?} => {}",
+                        n,
+                        total,
                         now.elapsed(),
-                        &repo.remote
+                        &repo.remote,
                     )
                 } else {
                     GitExecutable::git_clone(&repo).await.unwrap();
+                    let mut lock = mutex.lock().unwrap();
+                    *lock += 1;
+                    let n = *lock;
                     info!(
-                        "git clone elapsed {:#?}, repo {}",
+                        "[{}/{}] git clone: elapsed {:#?} => {}",
+                        n,
+                        total,
                         now.elapsed(),
-                        &repo.remote
+                        &repo.remote,
                     )
                 }
             });
             handles.push(handle);
         }
-        futures::future::join_all(handles).await;
+
+        for handle in handles {
+            handle.await.unwrap();
+        }
+        Ok(())
+    }
+
+    async fn checkout(&self, repo: &Repository) -> Result<()> {
+        if repo.branch.is_some() {
+            let branch = repo.branch.clone().unwrap();
+            if !branch.is_empty() {
+                GitExecutable::git_checkout(repo, &[branch.as_str()]).await;
+            }
+        }
         Ok(())
     }
 
@@ -347,20 +379,11 @@ impl Gitter for GitBinaryImpl {
             });
             handles.push(handle)
         }
-        futures::future::join_all(handles).await;
+        for handle in handles {
+            handle.await.unwrap();
+        }
 
         let s = mutex.lock().await;
         Ok(s.to_vec())
-    }
-
-    async fn current_branch(&self, repo: &Repository) -> Result<String> {
-        let lines = GitExecutable::git_branch(repo, &["--show-current"]).await?;
-        let branch = if !lines.is_empty() {
-            Ok(lines.first().unwrap().clone())
-        } else {
-            Err(Error::msg("unknown curren branch"))
-        };
-
-        branch
     }
 }

@@ -1,5 +1,4 @@
-use crate::config::AuthorMapping;
-use crate::{Author, Repository};
+use crate::{config::AuthorMapping, Author, Repository};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -38,6 +37,7 @@ pub struct TagStats {
 #[async_trait]
 pub trait Gitter: Send + Sync {
     async fn clone_or_pull(&self, repos: Vec<Repository>) -> Result<()>;
+    async fn checkout(&self, repo: &Repository) -> Result<()>;
     async fn commits(
         &self,
         repo: &Repository,
@@ -48,5 +48,4 @@ pub trait Gitter: Send + Sync {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<Vec<TagStats>>;
-    async fn current_branch(&self, repo: &Repository) -> Result<String>;
 }

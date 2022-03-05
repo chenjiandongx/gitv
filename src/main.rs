@@ -9,25 +9,20 @@ mod record_csv;
 mod repo_fetcher;
 mod repo_github;
 
-use crate::record_csv::CsvSerializer;
-use crate::repo_fetcher::RepoFetcher;
+use crate::{record_csv::CsvSerializer, repo_fetcher::RepoFetcher};
 use anyhow::Result;
 use chrono::Local;
 use clap::{Args, Parser, Subcommand};
 use config::*;
 use datafusion::prelude::*;
-use futures::StreamExt;
 use gitter::*;
 use gitter_binary::*;
 use query_functions::*;
 use record::*;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-use std::{io, time};
+use std::{io, time, time::Duration};
 use tracing::Level;
-use tracing::*;
-use tracing_subscriber::fmt::format::Writer;
-use tracing_subscriber::fmt::time::FormatTime;
+use tracing_subscriber::fmt::{format::Writer, time::FormatTime};
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -84,24 +79,15 @@ async fn main() -> Result<()> {
     let cli: Cli = Cli::parse();
     println!("path: {}", cli.path);
 
-    // let f = File::create("./database.yaml").unwrap();
     let c: Config = config::load_config(&cli.path).unwrap();
-
-    // tokio::
 
     if cli.fetch {
         let repo_fetcher = RepoFetcher::new(c.fetch.clone());
         repo_fetcher.fetch().await?;
     }
     if cli.init {
-        print!("hii");
         let serializer = CsvSerializer::new(GitBinaryImpl);
         serializer.serialize(c.init.clone()).await?
     }
-
-    // time::s(Duration::from_secs(2));
-    // let serializer = record_csv::CsvSerializer::new(GitBinaryImpl);
-    // serializer.serialize()
-    // println!("{:#?}", cli.path);
     Ok(())
 }

@@ -25,6 +25,7 @@ lazy_static! {
         udf_year,
         udf_month,
         udf_weekday,
+        udf_week,
         udf_hour,
         udf_timestamp,
         udf_timezone,
@@ -42,7 +43,7 @@ lazy_static! {
 pub struct Executor;
 
 impl Executor {
-    pub async fn create_context(config: Vec<config::Load>) -> Result<ExecutionContext> {
+    pub async fn create_context(config: Vec<config::Execution>) -> Result<ExecutionContext> {
         let mut ctx = ExecutionContext::new();
         for udf in UDFS.iter() {
             ctx.register_udf(udf());
@@ -87,7 +88,7 @@ fn udf_year() -> ScalarUDF {
     )
 }
 
-/// udf_year 计算给定时间的月份
+/// udf_month 计算给定时间的月份
 ///
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: 11
@@ -115,7 +116,7 @@ fn udf_month() -> ScalarUDF {
     )
 }
 
-/// udf_year 计算给定时间的月份
+/// udf_weekday 计算给定时间的星期字符
 ///
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: "Mon"
@@ -147,6 +148,41 @@ fn udf_weekday() -> ScalarUDF {
         Arc::new(DataType::Utf8),
         Volatility::Immutable,
         weekday,
+    )
+}
+
+/// udf_week 计算给定时间的星期数字
+///
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: 1
+fn udf_week() -> ScalarUDF {
+    let week = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
+        let array = base
+            .iter()
+            .map(|x| {
+                Some(
+                    DateTime::parse_from_rfc2822(x.unwrap())
+                        .unwrap()
+                        .weekday()
+                        .num_days_from_monday(),
+                )
+            })
+            .collect::<array::UInt32Array>();
+
+        Ok(Arc::new(array) as array::ArrayRef)
+    };
+
+    let week = make_scalar_function(week);
+    create_udf(
+        "week",
+        vec![DataType::Utf8],
+        Arc::new(DataType::UInt32),
+        Volatility::Immutable,
+        week,
     )
 }
 

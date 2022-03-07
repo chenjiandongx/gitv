@@ -82,7 +82,7 @@ pub struct FetchAction {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Github {
     pub base_dir: String,
-    pub output: String,
+    pub destination: String,
     pub token: String,
     pub exclude_orgs: Option<Vec<String>>,
     pub exclude_repos: Option<Vec<String>>,
@@ -91,44 +91,60 @@ pub struct Github {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct RenderAction {
-    pub options: ChartOptions,
-    pub queries: Vec<Query>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ShellAction {
-    pub load: Option<Vec<Load>>,
+    pub executions: Vec<Execution>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct Load {
+pub struct Execution {
     pub table_name: String,
     pub file: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct ChartOptions {
-    #[serde(rename(deserialize = "backgroundColor"))]
-    pub background_color: Option<String>,
-    pub width: Option<i32>,
-    pub height: Option<i32>,
-    pub format: Option<String>,
+pub struct RenderAction {
+    pub executions: Vec<Execution>,
+    pub display: Display,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Display {
+    pub destination: String,
+    pub console_only: bool,
+    pub render_api: String,
+    pub render_options: GraphOptions,
+    pub queries: Vec<Query>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GraphOptions {
+    #[serde(rename(serialize = "backgroundColor", deserialize = "background_color"))]
+    pub background_color: String,
+    pub width: i32,
+    pub height: i32,
+    pub format: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Query {
-    pub sql: String,
-    pub charts: Option<Vec<Chart>>,
+    pub statements: Vec<String>,
+    pub graph: Graph,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct Chart {
+pub struct Graph {
+    #[serde(rename(deserialize = "type"))]
     pub chart_type: String,
+    pub name: String,
     pub title: String,
-    pub labels: String,
-    pub datasets: Vec<String>,
-    pub options: Option<ChartOptions>,
+    pub series: Vec<Series>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Series {
+    pub legend: String,
+    pub label: String,
+    pub dataset: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

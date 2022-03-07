@@ -24,9 +24,9 @@ impl RepoFetcher {
         for config in self.opts.github.clone().unwrap_or_default() {
             let handle = tokio::spawn(async move {
                 let repos = GithubRepoFetcher::repositories(&config).await.unwrap();
-                let f = File::create(&config.output).unwrap();
+                let f = File::create(&config.destination).unwrap();
                 serde_yaml::to_writer(f, &repos).unwrap();
-                info!("save database file '{}'", &config.output);
+                info!("save database file '{}'", &config.destination);
             });
             handles.push(handle);
         }

@@ -1,15 +1,16 @@
-mod charts;
 mod config;
 mod gitter;
 mod gitter_binary;
-mod query;
 mod query_executor;
 mod record;
 mod record_csv;
+mod render;
+mod render_graph;
 mod repo_fetcher;
 mod repo_github;
 mod shell;
 
+use crate::render_graph::GraphRender;
 use crate::{record_csv::CsvSerializer, repo_fetcher::RepoFetcher};
 use anyhow::Result;
 use chrono::Local;
@@ -23,6 +24,12 @@ use std::io;
 use std::process::exit;
 use tracing::*;
 use tracing_subscriber::fmt::{format::Writer, time::FormatTime};
+
+// TODO(optimize): 拆分大函数
+// TODO(docs): 完善代码注释
+// TODO(feat): 新增代码函数统计
+// TODO(optimize): 统一配置校验方式
+// TODO(optimize): 更合理的错误处理方式
 
 struct LocalTimer;
 
@@ -77,23 +84,26 @@ async fn main() -> Result<()> {
     let c: Config = config::load_config(&cli.path).unwrap();
 
     if cli.fetch {
-        let repo_fetcher = RepoFetcher::new(c.fetch.clone());
+        let repo_fetcher = RepoFetcher::new(c.fetch);
         repo_fetcher.fetch().await?;
     }
+
     if cli.init {
         let serializer = CsvSerializer::new(GitBinaryImpl);
-        serializer.serialize(c.init.clone()).await?
+        serializer.serialize(c.init).await?
     }
+
     if cli.shell {
-        let config = match c.shell.load {
-            Some(c) => c,
-            None => {
-                error!("No load config found");
-                exit(1)
-            }
-        };
-        let ctx = Executor::create_context(config).await?;
+        let ctx = Executor::create_context(c.shell.executions).await?;
         shell::console_loop(ctx).await?;
+        exit(0)
+    }
+
+    if cli.render {
+        let executions = c.render.executions.clone();
+        let ctx = Executor::create_context(executions).await?;
+        let mut render = GraphRender::new(ctx, c.render);
+        render.render().await.unwrap();
     }
 
     Ok(())

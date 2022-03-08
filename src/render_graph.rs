@@ -1,31 +1,47 @@
-use crate::{config, GraphOptions, Query};
+use crate::{config, GraphOptions};
 use anyhow::Result;
-use datafusion::arrow::array;
-use datafusion::arrow::datatypes::DataType;
-use datafusion::prelude::ExecutionContext;
-use serde::Serialize;
-use std::path::Path;
+use datafusion::{
+    arrow::{array, datatypes::DataType},
+    prelude::ExecutionContext,
+};
+use serde::{Serialize, Serializer};
 use std::{
+    collections::HashMap,
+    fmt::Debug,
     fs::File,
     io::{copy, Cursor},
+    path::Path,
 };
 
-#[derive(Debug)]
-pub struct ColumnResult {
-    pub labels: Vec<LabelsColumn>,
-    pub values: Vec<ValuesColumn>,
+#[derive(Debug, Clone)]
+pub enum ColumnType {
+    Float64(f64),
+    String(String),
 }
 
-#[derive(Debug)]
-pub struct LabelsColumn {
-    pub column: String,
-    pub data: Vec<String>,
+impl Serialize for ColumnType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ColumnType::Float64(v) => serializer.serialize_f64(*v),
+            ColumnType::String(v) => serializer.serialize_str(v.as_str()),
+        }
+    }
 }
 
-#[derive(Debug)]
-pub struct ValuesColumn {
-    pub column: String,
-    pub data: Vec<f64>,
+#[derive(Debug, Serialize)]
+pub struct ColumnMap {
+    pub store: HashMap<String, Vec<ColumnType>>,
+}
+
+impl ColumnMap {
+    fn new() -> Self {
+        Self {
+            store: HashMap::new(),
+        }
+    }
 }
 
 struct Engine {
@@ -37,12 +53,8 @@ impl Engine {
         Self { ctx }
     }
 
-    async fn select(&mut self, sql: &str) -> Result<ColumnResult> {
-        let mut result = ColumnResult {
-            labels: vec![],
-            values: vec![],
-        };
-
+    async fn select(&mut self, sql: &str) -> Result<ColumnMap> {
+        let mut cm = ColumnMap::new();
         let ctx = &mut self.ctx;
         let df = ctx.sql(sql).await?;
         for val in df.collect().await? {
@@ -61,135 +73,124 @@ impl Engine {
                 let name = field.name().to_string();
                 match field.data_type() {
                     DataType::Utf8 => {
-                        result.labels.push(LabelsColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::StringArray>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::StringArray>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap().to_string())
-                                .collect::<Vec<String>>(),
-                        });
+                                .map(|x| ColumnType::String(x.unwrap().to_string()))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::Float64 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::Float64Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::Float64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::Float32 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::Float32Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::Float32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::UInt64 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::UInt64Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::UInt64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::Int64 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::Int64Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::Int64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::UInt32 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::UInt32Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::UInt32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::Int32 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::Int32Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::Int32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::UInt16 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::UInt16Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::UInt16Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::Int16 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::Int16Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::Int16Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::UInt8 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::UInt8Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::UInt8Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     DataType::Int8 => {
-                        result.values.push(ValuesColumn {
-                            column: name,
-                            data: data
-                                .downcast_ref::<array::Int8Array>()
+                        cm.store.insert(
+                            name,
+                            data.downcast_ref::<array::Int8Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| x.unwrap() as f64)
-                                .collect::<Vec<f64>>(),
-                        });
+                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .collect::<Vec<ColumnType>>(),
+                        );
                     }
 
                     _ => (),
@@ -197,26 +198,11 @@ impl Engine {
             }
         }
 
-        Ok(result)
-    }
-}
-
-enum ChartType {
-    Bar,
-    Line,
-}
-
-impl From<ChartType> for String {
-    fn from(t: ChartType) -> Self {
-        match t {
-            ChartType::Bar => String::from("bar"),
-            ChartType::Line => String::from("line"),
-        }
+        Ok(cm)
     }
 }
 
 static DEFAULT_API: &str = "https://quickchart.io";
-static DEFAULT_ROUTE: &str = "/chart";
 
 pub struct GraphRender {
     api: String,
@@ -226,37 +212,38 @@ pub struct GraphRender {
 
 impl GraphRender {
     pub fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
+        let route = "/chart";
         let api = config.display.render_api.clone();
         let api = if api.is_empty() {
-            DEFAULT_API.to_owned() + DEFAULT_ROUTE.clone()
+            DEFAULT_API.to_owned() + route
         } else {
-            api + DEFAULT_ROUTE.clone()
+            api + route
         };
 
         Self {
             api,
             config,
-            engine: Engine { ctx },
+            engine: Engine::new(ctx),
         }
     }
 }
 
 #[derive(Debug, Serialize)]
 pub struct Data {
-    pub labels: Vec<String>,
+    pub labels: Vec<ColumnType>,
     pub datasets: Vec<Dataset>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Dataset {
     label: String,
-    data: Vec<f64>,
+    data: Vec<ColumnType>,
 }
 
 #[derive(Debug, Serialize)]
 struct Chart {
     #[serde(rename(serialize = "type"))]
-    chart_type: String,
+    chart_type: &'static str,
     data: Data,
 }
 
@@ -267,13 +254,16 @@ struct Parameters {
     chart: Chart,
 }
 
+const CHART_BAR: &str = "bar";
+const CHART_LINE: &str = "line";
+
 impl GraphRender {
     pub async fn render(&mut self) -> Result<()> {
         let queries = self.config.display.queries.clone();
         for query in queries {
-            let mut crs = vec![];
+            let mut cms = vec![];
             for sql in query.statements {
-                crs.push(self.engine.select(&sql).await.unwrap())
+                cms.push(self.engine.select(&sql).await.unwrap())
             }
 
             let dest = Path::new(self.config.display.destination.as_str()).join(format!(
@@ -283,12 +273,12 @@ impl GraphRender {
             let dest = dest.to_str().unwrap();
 
             match query.graph.chart_type.as_str() {
-                "bar" => {
-                    self.render_2d_axis_chart("bar".to_string(), crs, query.graph, dest)
+                CHART_BAR => {
+                    self.render_2d_axis_chart(CHART_BAR, cms, query.graph, dest)
                         .await?;
                 }
-                "line" => {
-                    self.render_2d_axis_chart("line".to_string(), crs, query.graph, dest)
+                CHART_LINE => {
+                    self.render_2d_axis_chart(CHART_LINE, cms, query.graph, dest)
                         .await?;
                 }
                 _ => {}
@@ -299,27 +289,24 @@ impl GraphRender {
 
     pub async fn render_2d_axis_chart(
         &mut self,
-        chart_type: String,
-        crs: Vec<ColumnResult>,
+        chart_type: &'static str,
+        cms: Vec<ColumnMap>,
         graph: config::Graph,
         dest: &str,
     ) -> Result<()> {
-        if crs.is_empty() || graph.series.is_empty() {
+        if cms.is_empty() || graph.series.is_empty() {
             return Ok(());
         }
 
         let mut labels = vec![];
         let mut datasets = vec![];
         for (i, series) in graph.series.iter().enumerate() {
-            // graph 的 label 默认只取第一个 因为目前只支持单 X 轴
             if i == 0 {
-                for l in &crs[0].labels {
-                    if l.column == series.label {
-                        labels = l.data.clone();
-                    }
+                let value = cms[0].store.get(&series.label);
+                if let Some(lbs) = value {
+                    labels = lbs.to_vec()
                 }
             }
-            let legend = series.legend.clone();
 
             let mut index: usize = 0;
             let mut dataset = &*series.dataset.clone();
@@ -328,20 +315,18 @@ impl GraphRender {
                 index = fields[0].parse::<usize>().unwrap_or_default();
                 dataset = fields[1];
             }
-            if index >= crs.len() {
+            if index >= cms.len() {
                 index = 0
             }
 
-            let mut values = vec![];
-            for v in &crs[index].values {
-                if v.column == dataset {
-                    values = v.data.clone();
-                }
+            let legend = series.legend.clone();
+            let value = cms[index].store.get(dataset);
+            if let Some(vs) = value {
+                datasets.push(Dataset {
+                    label: legend,
+                    data: vs.to_vec(),
+                })
             }
-            datasets.push(Dataset {
-                label: legend,
-                data: values,
-            })
         }
 
         let param = Parameters {
@@ -351,8 +336,6 @@ impl GraphRender {
                 data: Data { labels, datasets },
             },
         };
-
-        println!("param: {:#?}", param);
 
         let response = reqwest::Client::new()
             .post(&self.api)

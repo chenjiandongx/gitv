@@ -4,14 +4,12 @@ mod gitter_binary;
 mod query_executor;
 mod record;
 mod record_csv;
-mod render;
 mod render_graph;
 mod repo_fetcher;
 mod repo_github;
 mod shell;
 
-use crate::render_graph::GraphRender;
-use crate::{record_csv::CsvSerializer, repo_fetcher::RepoFetcher};
+use crate::{record_csv::CsvSerializer, render_graph::GraphRender, repo_fetcher::RepoFetcher};
 use anyhow::Result;
 use chrono::Local;
 use clap::Parser;
@@ -20,8 +18,7 @@ use gitter::*;
 use gitter_binary::*;
 use query_executor::*;
 use record::*;
-use std::io;
-use std::process::exit;
+use std::{io, process::exit};
 use tracing::*;
 use tracing_subscriber::fmt::{format::Writer, time::FormatTime};
 

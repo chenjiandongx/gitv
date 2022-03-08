@@ -20,3 +20,5 @@ Cargo.lock
 .DS_Store
 database/
 *.yaml
+*.png
+*.svg

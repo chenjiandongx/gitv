@@ -1,8 +1,6 @@
 use anyhow::{anyhow, Context, Result};
-use datafusion::arrow::util::pretty;
-use datafusion::prelude::ExecutionContext;
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
+use datafusion::{arrow::util::pretty, prelude::ExecutionContext};
+use rustyline::{error::ReadlineError, Editor};
 use std::path::PathBuf;
 
 fn history_path() -> Result<PathBuf> {

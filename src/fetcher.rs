@@ -84,7 +84,7 @@ struct GithubRepoResponse {
 }
 
 impl GithubRepoFetcher {
-    pub async fn repositories(config: &config::Github) -> Result<Vec<Repository>> {
+    async fn repositories(config: &config::Github) -> Result<Vec<Repository>> {
         let mut finish = false;
         let mut page: u16 = 1;
         let mut repos = vec![];

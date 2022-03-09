@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use std::{
     fs::File,
     path::{Path, PathBuf},
@@ -114,12 +115,12 @@ pub struct Display {
     pub destination: String,
     pub render_mode: String,
     pub render_api: String,
-    pub render_options: ChartOptions,
+    pub render_config: ChartConfig,
     pub queries: Vec<Query>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ChartOptions {
+pub struct ChartConfig {
     #[serde(rename(serialize = "backgroundColor"))]
     pub background_color: String,
     pub width: i32,
@@ -130,7 +131,7 @@ pub struct ChartOptions {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Query {
     pub statements: Vec<String>,
-    pub chart: Chart,
+    pub chart: Option<Chart>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -138,7 +139,7 @@ pub struct Chart {
     #[serde(rename(deserialize = "type"))]
     pub chart_type: String,
     pub name: String,
-    pub title: String,
+    pub options: Option<Value>,
     pub series: Vec<Series>,
 }
 

@@ -1,4 +1,4 @@
-use crate::{config, ChartOptions};
+use crate::{config, ChartConfig};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use datafusion::{
@@ -6,6 +6,7 @@ use datafusion::{
     prelude::ExecutionContext,
 };
 use serde::{Serialize, Serializer};
+use serde_yaml::Value;
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -300,18 +301,23 @@ impl ResultRender for ChartRender {
                 cms.push(self.engine.select(&sql).await.unwrap())
             }
 
+            if query.chart.is_none() {
+                return Ok(());
+            }
+            let chart_config = query.chart.unwrap();
+
             let dest = Path::new(display_config.destination.as_str()).join(format!(
                 "{}.{}",
-                query.chart.name, display_config.render_options.format
+                chart_config.name, display_config.render_config.format
             ));
 
-            let t = query.chart.chart_type.as_str();
+            let t = chart_config.chart_type.as_str();
             match ChartType::from(t) {
                 ChartType::Bar => {
-                    self.render_bar_chart(query.chart, cms, dest).await?;
+                    self.render_bar_chart(chart_config, cms, dest).await?;
                 }
                 ChartType::Line => {
-                    self.render_line_chart(query.chart, cms, dest).await?;
+                    self.render_line_chart(chart_config, cms, dest).await?;
                 }
                 ChartType::Unsupported => return Err(anyhow!("unsupported chart type '{}'", t)),
             }
@@ -337,12 +343,13 @@ struct Chart {
     #[serde(rename(serialize = "type"))]
     chart_type: String,
     data: Data,
+    options: Value,
 }
 
 #[derive(Debug, Serialize)]
 struct Parameters {
     #[serde(flatten)]
-    options: ChartOptions,
+    conf: ChartConfig,
     chart: Chart,
 }
 
@@ -436,10 +443,11 @@ impl ChartRender {
         }
 
         let param = Parameters {
-            options: self.config.display.render_options.clone(),
+            conf: self.config.display.render_config.clone(),
             chart: Chart {
                 chart_type: chart_type.into(),
                 data: Data { labels, datasets },
+                options: chart_config.options.unwrap_or_default(),
             },
         };
 

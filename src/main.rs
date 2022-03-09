@@ -18,7 +18,6 @@ use std::{io, process::exit};
 use tracing::*;
 use tracing_subscriber::fmt::{format::Writer, time::FormatTime};
 
-// TODO(optimize): 拆分大函数
 // TODO(feat): 新增代码函数统计
 // TODO(optimize): 统一配置校验方式
 

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::{fs::File, path::Path};
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -64,13 +65,12 @@ impl Database {
 }
 
 impl Database {
-    pub fn location(&self, ext: String) -> String {
-        let p = Path::new(self.base_dir.as_str()).join(format!(
+    pub fn location(&self, ext: String) -> PathBuf {
+        Path::new(self.base_dir.as_str()).join(format!(
             "{}.{}",
             self.table_name.clone(),
             ext.as_str()
-        ));
-        p.to_str().unwrap().to_string()
+        ))
     }
 }
 

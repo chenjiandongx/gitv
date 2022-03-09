@@ -3,6 +3,7 @@ use datafusion::{arrow::util::pretty, prelude::ExecutionContext};
 use rustyline::{error::ReadlineError, Editor};
 use std::path::PathBuf;
 
+/// 记录 gitx shell 的语句执行历史，默认路径为 ~/.gitx
 fn history_path() -> Result<PathBuf> {
     let mut home =
         dirs::home_dir().ok_or_else(|| anyhow!("Failed to locate user home directory"))?;
@@ -10,11 +11,12 @@ fn history_path() -> Result<PathBuf> {
     Ok(home)
 }
 
+/// 持续循环读取并执行 sql 语句，监听 `Ctrl+C`、`q`、`Q` 作为退出信号
 pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
-    let rl_history = history_path()?;
+    let history = history_path()?;
 
     let mut readline = Editor::<()>::new();
-    let _ = readline.load_history(&rl_history);
+    readline.load_history(&history).unwrap_or(());
 
     loop {
         match readline.readline("gitx(sql)> ") {
@@ -48,6 +50,6 @@ pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
     }
 
     readline
-        .save_history(&rl_history)
+        .save_history(&history)
         .context("Failed to save query history")
 }

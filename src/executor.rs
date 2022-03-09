@@ -21,6 +21,7 @@ use lazy_static::lazy_static;
 use std::{collections::HashSet, sync::Arc};
 
 lazy_static! {
+    /// udf 函数集合
     static ref UDFS: Vec<fn() -> ScalarUDF> = vec![
         udf_year,
         udf_month,
@@ -32,6 +33,8 @@ lazy_static! {
         udf_duration,
         udf_time_format,
     ];
+
+    /// udaf 函数集合
     static ref UDAFS: Vec<fn() -> AggregateUDF> = vec![
         udaf_active_days,
         udaf_active_longest_count,
@@ -40,30 +43,13 @@ lazy_static! {
     ];
 }
 
-pub struct Executor;
-
-impl Executor {
-    pub async fn create_context(config: Vec<config::Execution>) -> Result<ExecutionContext> {
-        let mut ctx = ExecutionContext::new();
-        for udf in UDFS.iter() {
-            ctx.register_udf(udf());
-        }
-        for udaf in UDAFS.iter() {
-            ctx.register_udaf(udaf())
-        }
-
-        for c in config {
-            ctx.register_csv(&c.table_name, &c.file, CsvReadOptions::new())
-                .await?;
-        }
-        Ok(ctx)
-    }
-}
-
-/// udf_year 计算给定时间的年份
+/// 计算给定时间的年份
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: 2021
+/// ```
 fn udf_year() -> ScalarUDF {
     let year = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -88,10 +74,13 @@ fn udf_year() -> ScalarUDF {
     )
 }
 
-/// udf_month 计算给定时间的月份
+/// 计算给定时间的月份
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: 11
+/// ```
 fn udf_month() -> ScalarUDF {
     let month = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -116,10 +105,13 @@ fn udf_month() -> ScalarUDF {
     )
 }
 
-/// udf_weekday 计算给定时间的星期字符
+/// 计算给定时间的星期字符
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: "Mon"
+/// ```
 fn udf_weekday() -> ScalarUDF {
     let weekday = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -151,10 +143,13 @@ fn udf_weekday() -> ScalarUDF {
     )
 }
 
-/// udf_week 计算给定时间的星期数字
+/// 计算给定时间的星期数字
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: 1
+/// ```
 fn udf_week() -> ScalarUDF {
     let week = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -186,10 +181,13 @@ fn udf_week() -> ScalarUDF {
     )
 }
 
-/// udf_year 计算给定时间的小时数
+/// 计算给定时间的小时数
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: 15
+/// ```
 fn udf_hour() -> ScalarUDF {
     let hour = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -214,10 +212,13 @@ fn udf_hour() -> ScalarUDF {
     )
 }
 
-/// udf_year 计算给定时间的 Unix 时间戳
+/// 计算给定时间的 Unix 时间戳
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: 1636960758
+/// ```
 fn udf_timestamp() -> ScalarUDF {
     let timestamp = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -248,10 +249,13 @@ fn udf_timestamp() -> ScalarUDF {
     )
 }
 
-/// udf_year 计算给定时间到现在时间的长度
+/// 计算给定时间到现在时间的长度
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: "30hours 2minutes"
+/// ```
 fn udf_duration() -> ScalarUDF {
     let duration = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -279,10 +283,13 @@ fn udf_duration() -> ScalarUDF {
     )
 }
 
-/// udf_year 计算给定时间的时区
+/// 计算给定时间的时区
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: "+08:00"
+/// ```
 fn udf_timezone() -> ScalarUDF {
     let timezone = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -314,10 +321,13 @@ fn udf_timezone() -> ScalarUDF {
     )
 }
 
-/// udf_year 格式化时间
+/// 格式化字符串时间
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822, arg2: String>: ("Mon, 15 Nov 2021 15:19:18 +0800", "%Y-%m-%d %H:%M:%S")
 /// output: "2021-11-15 15:19:18"
+/// ```
 fn udf_time_format() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -354,10 +364,13 @@ fn udf_time_format() -> ScalarUDF {
     )
 }
 
-/// udaf_active_days 计算某天 commits 数量
+/// 计算某天 commits 数量
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: n
+/// ```
 fn udaf_active_days() -> AggregateUDF {
     create_udaf(
         "active_days",
@@ -369,10 +382,13 @@ fn udaf_active_days() -> AggregateUDF {
     )
 }
 
-/// udaf_active_longest_count 计算最大连续多少天有提交记录
+/// 计算最大连续多少天有提交记录
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: n
+/// ```
 fn udaf_active_longest_count() -> AggregateUDF {
     create_udaf(
         "active_longest_count",
@@ -388,10 +404,13 @@ fn udaf_active_longest_count() -> AggregateUDF {
     )
 }
 
-/// udaf_active_longest_count 计算最大连续提交天数的起始时间
+/// 计算最大连续提交天数的起始时间
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: "2020-01-02"
+/// ```
 fn udaf_active_longest_start() -> AggregateUDF {
     create_udaf(
         "active_longest_start",
@@ -407,10 +426,13 @@ fn udaf_active_longest_start() -> AggregateUDF {
     )
 }
 
-/// udaf_active_longest_count 计算最大连续提交天数的结束时间
+/// 计算最大连续提交天数的结束时间
 ///
+/// # Example
+/// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: "2020-01-05"
+/// ```
 fn udaf_active_longest_end() -> AggregateUDF {
     create_udaf(
         "active_longest_end",
@@ -426,6 +448,28 @@ fn udaf_active_longest_end() -> AggregateUDF {
     )
 }
 
+/// sql 查询执行器
+pub struct Executor;
+
+impl Executor {
+    pub async fn create_context(config: Vec<config::Execution>) -> Result<ExecutionContext> {
+        let mut ctx = ExecutionContext::new();
+        for udf in UDFS.iter() {
+            ctx.register_udf(udf());
+        }
+        for udaf in UDAFS.iter() {
+            ctx.register_udaf(udaf())
+        }
+
+        for c in config {
+            ctx.register_csv(&c.table_name, &c.file, CsvReadOptions::new())
+                .await?;
+        }
+        Ok(ctx)
+    }
+}
+
+/// 所有时间输入类型的 Accumulator 的基类
 #[derive(Debug)]
 struct TimeInputAccumulator {
     data: Vec<i64>,
@@ -447,6 +491,7 @@ impl TimeInputAccumulator {
         Ok(vec![values])
     }
 
+    /// 定义如何收集数据
     fn gather(&mut self, states: &[ScalarValue]) {
         for state in states {
             if let ScalarValue::List(Some(values), _) = state {
@@ -459,6 +504,7 @@ impl TimeInputAccumulator {
         }
     }
 
+    /// 定义如何更新数据
     fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
         let value = &values[0];
         if let ScalarValue::Utf8(e) = value {
@@ -502,7 +548,7 @@ struct ActiveDays {
 }
 
 impl ActiveDays {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             tla: TimeInputAccumulator::new(),
         }
@@ -536,8 +582,13 @@ impl Accumulator for ActiveDays {
 }
 
 enum ActiveLongestType {
+    /// 最大连续天数
     Count,
+
+    /// 起始时间
     Start,
+
+    /// 结束时间
     End,
 }
 
@@ -557,7 +608,7 @@ struct ActiveLongest {
 }
 
 impl ActiveLongest {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             tla: TimeInputAccumulator::new(),
         }

@@ -5,6 +5,7 @@ use datafusion::{
     prelude::ExecutionContext,
 };
 use serde::{Serialize, Serializer};
+use std::path::PathBuf;
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -16,6 +17,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub enum ColumnType {
     Float64(f64),
+    Int64(i64),
     String(String),
 }
 
@@ -26,6 +28,7 @@ impl Serialize for ColumnType {
     {
         match self {
             ColumnType::Float64(v) => serializer.serialize_f64(*v),
+            ColumnType::Int64(v) => serializer.serialize_i64(*v),
             ColumnType::String(v) => serializer.serialize_str(v.as_str()),
         }
     }
@@ -57,6 +60,7 @@ impl Engine {
         let mut cm = ColumnMap::new();
         let ctx = &mut self.ctx;
         let df = ctx.sql(sql).await?;
+
         for val in df.collect().await? {
             if val.num_rows() == 0 {
                 continue;
@@ -111,7 +115,7 @@ impl Engine {
                             data.downcast_ref::<array::UInt64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -122,7 +126,7 @@ impl Engine {
                             data.downcast_ref::<array::Int64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap()))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -133,7 +137,7 @@ impl Engine {
                             data.downcast_ref::<array::UInt32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -144,7 +148,7 @@ impl Engine {
                             data.downcast_ref::<array::Int32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -155,7 +159,7 @@ impl Engine {
                             data.downcast_ref::<array::UInt16Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -166,7 +170,7 @@ impl Engine {
                             data.downcast_ref::<array::Int16Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -177,7 +181,7 @@ impl Engine {
                             data.downcast_ref::<array::UInt8Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -188,7 +192,7 @@ impl Engine {
                             data.downcast_ref::<array::Int8Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
+                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
                                 .collect::<Vec<ColumnType>>(),
                         );
                     }
@@ -259,18 +263,18 @@ const CHART_LINE: &str = "line";
 
 impl GraphRender {
     pub async fn render(&mut self) -> Result<()> {
-        let queries = self.config.display.queries.clone();
+        let display = self.config.display.clone();
+        let queries = display.queries.clone();
         for query in queries {
             let mut cms = vec![];
             for sql in query.statements {
                 cms.push(self.engine.select(&sql).await.unwrap())
             }
 
-            let dest = Path::new(self.config.display.destination.as_str()).join(format!(
+            let dest = Path::new(display.destination.as_str()).join(format!(
                 "{}.{}",
-                query.graph.name, self.config.display.render_options.format
+                query.graph.name, display.render_options.format
             ));
-            let dest = dest.to_str().unwrap();
 
             match query.graph.chart_type.as_str() {
                 CHART_BAR => {
@@ -292,7 +296,7 @@ impl GraphRender {
         chart_type: &'static str,
         cms: Vec<ColumnMap>,
         graph: config::Graph,
-        dest: &str,
+        dest: PathBuf,
     ) -> Result<()> {
         if cms.is_empty() || graph.series.is_empty() {
             return Ok(());

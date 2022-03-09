@@ -1,22 +1,18 @@
 mod config;
+mod executor;
+mod fetcher;
 mod gitter;
-mod gitter_binary;
-mod query_executor;
 mod record;
-mod record_csv;
-mod render_graph;
-mod repo_fetcher;
-mod repo_github;
+mod render;
 mod shell;
 
-use crate::{record_csv::CsvSerializer, render_graph::GraphRender, repo_fetcher::RepoFetcher};
+use crate::{fetcher::RepoFetcher, record::CsvSerializer, render::GraphRender};
 use anyhow::Result;
 use chrono::Local;
 use clap::Parser;
 use config::*;
+use executor::*;
 use gitter::*;
-use gitter_binary::*;
-use query_executor::*;
 use record::*;
 use std::{io, process::exit};
 use tracing::*;
@@ -86,7 +82,7 @@ async fn main() -> Result<()> {
     }
 
     if cli.init {
-        let serializer = CsvSerializer::new(GitBinaryImpl);
+        let serializer = CsvSerializer::new(BinaryGitter);
         serializer.serialize(c.init).await?
     }
 

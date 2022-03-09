@@ -3,11 +3,11 @@ use anyhow::{anyhow, Result};
 use async_process::Command;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use std::process::exit;
 use std::{
     collections::HashMap,
     fs,
     path::Path,
+    process::exit,
     sync::{Arc, Mutex},
     time,
 };

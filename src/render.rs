@@ -1,18 +1,19 @@
-use crate::{config, GraphOptions};
-use anyhow::Result;
+use crate::{config, ChartOptions};
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use datafusion::{
     arrow::{array, datatypes::DataType},
     prelude::ExecutionContext,
 };
 use serde::{Serialize, Serializer};
-use std::path::PathBuf;
 use std::{
     collections::HashMap,
     fmt::Debug,
     fs::File,
     io::{copy, Cursor},
-    path::Path,
+    path::{Path, PathBuf},
 };
+use tracing::info;
 
 #[derive(Debug, Clone)]
 pub enum ColumnType {
@@ -206,16 +207,72 @@ impl Engine {
     }
 }
 
+enum RenderMode {
+    Table,
+    Chart,
+    Unsupported,
+}
+
+impl From<&str> for RenderMode {
+    fn from(s: &str) -> Self {
+        match s {
+            "table" => RenderMode::Table,
+            "chart" => RenderMode::Chart,
+            _ => RenderMode::Unsupported,
+        }
+    }
+}
+
+#[async_trait]
+pub trait ResultRender {
+    async fn render(&mut self) -> Result<()>;
+}
+
+pub fn create_render(ctx: ExecutionContext, config: config::RenderAction) -> Box<dyn ResultRender> {
+    match RenderMode::from(config.display.render_mode.as_str()) {
+        RenderMode::Chart => Box::new(ChartRender::new(ctx, config)),
+        RenderMode::Table | RenderMode::Unsupported => Box::new(TableRender::new(ctx, config)),
+    }
+}
+
+struct TableRender {
+    config: config::RenderAction,
+    ctx: ExecutionContext,
+}
+
+impl TableRender {
+    fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
+        Self { ctx, config }
+    }
+}
+
+#[async_trait]
+impl ResultRender for TableRender {
+    async fn render(&mut self) -> Result<()> {
+        let display = self.config.display.clone();
+        let queries = display.queries.clone();
+        for query in queries {
+            for sql in query.statements {
+                println!("SQL: {}", sql);
+                let df = self.ctx.sql(&sql).await?;
+                df.show().await?;
+                println!()
+            }
+        }
+        Ok(())
+    }
+}
+
 static DEFAULT_API: &str = "https://quickchart.io";
 
-pub struct GraphRender {
+struct ChartRender {
     api: String,
     config: config::RenderAction,
     engine: Engine,
 }
 
-impl GraphRender {
-    pub fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
+impl ChartRender {
+    fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
         let route = "/chart";
         let api = config.display.render_api.clone();
         let api = if api.is_empty() {
@@ -229,6 +286,37 @@ impl GraphRender {
             config,
             engine: Engine::new(ctx),
         }
+    }
+}
+
+#[async_trait]
+impl ResultRender for ChartRender {
+    async fn render(&mut self) -> Result<()> {
+        let display_config = self.config.display.clone();
+        let queries = display_config.queries.clone();
+        for query in queries {
+            let mut cms = vec![];
+            for sql in query.statements {
+                cms.push(self.engine.select(&sql).await.unwrap())
+            }
+
+            let dest = Path::new(display_config.destination.as_str()).join(format!(
+                "{}.{}",
+                query.chart.name, display_config.render_options.format
+            ));
+
+            let t = query.chart.chart_type.as_str();
+            match ChartType::from(t) {
+                ChartType::Bar => {
+                    self.render_bar_chart(query.chart, cms, dest).await?;
+                }
+                ChartType::Line => {
+                    self.render_line_chart(query.chart, cms, dest).await?;
+                }
+                ChartType::Unsupported => return Err(anyhow!("unsupported chart type '{}'", t)),
+            }
+        }
+        Ok(())
     }
 }
 
@@ -247,64 +335,78 @@ pub struct Dataset {
 #[derive(Debug, Serialize)]
 struct Chart {
     #[serde(rename(serialize = "type"))]
-    chart_type: &'static str,
+    chart_type: String,
     data: Data,
 }
 
 #[derive(Debug, Serialize)]
 struct Parameters {
     #[serde(flatten)]
-    options: GraphOptions,
+    options: ChartOptions,
     chart: Chart,
 }
 
-const CHART_BAR: &str = "bar";
-const CHART_LINE: &str = "line";
+enum ChartType {
+    Bar,
+    Line,
+    Unsupported,
+}
 
-impl GraphRender {
-    pub async fn render(&mut self) -> Result<()> {
-        let display = self.config.display.clone();
-        let queries = display.queries.clone();
-        for query in queries {
-            let mut cms = vec![];
-            for sql in query.statements {
-                cms.push(self.engine.select(&sql).await.unwrap())
-            }
-
-            let dest = Path::new(display.destination.as_str()).join(format!(
-                "{}.{}",
-                query.graph.name, display.render_options.format
-            ));
-
-            match query.graph.chart_type.as_str() {
-                CHART_BAR => {
-                    self.render_2d_axis_chart(CHART_BAR, cms, query.graph, dest)
-                        .await?;
-                }
-                CHART_LINE => {
-                    self.render_2d_axis_chart(CHART_LINE, cms, query.graph, dest)
-                        .await?;
-                }
-                _ => {}
-            }
+impl From<&str> for ChartType {
+    fn from(s: &str) -> Self {
+        match s {
+            "bar" => ChartType::Bar,
+            "line" => ChartType::Line,
+            _ => ChartType::Unsupported,
         }
-        Ok(())
     }
+}
 
-    pub async fn render_2d_axis_chart(
+impl From<ChartType> for String {
+    fn from(ct: ChartType) -> Self {
+        match ct {
+            ChartType::Bar => String::from("bar"),
+            ChartType::Line => String::from("line"),
+            ChartType::Unsupported => String::from("Unsupported"),
+        }
+    }
+}
+
+impl ChartRender {
+    async fn render_bar_chart(
         &mut self,
-        chart_type: &'static str,
+        chart_config: config::Chart,
         cms: Vec<ColumnMap>,
-        graph: config::Graph,
         dest: PathBuf,
     ) -> Result<()> {
-        if cms.is_empty() || graph.series.is_empty() {
+        self.render_2d_axis_chart(ChartType::Bar, chart_config, cms, dest)
+            .await
+    }
+
+    async fn render_line_chart(
+        &mut self,
+        chart_config: config::Chart,
+        cms: Vec<ColumnMap>,
+        dest: PathBuf,
+    ) -> Result<()> {
+        self.render_2d_axis_chart(ChartType::Line, chart_config, cms, dest)
+            .await
+    }
+
+    async fn render_2d_axis_chart(
+        &mut self,
+        chart_type: ChartType,
+        chart_config: config::Chart,
+        cms: Vec<ColumnMap>,
+        dest: PathBuf,
+    ) -> Result<()> {
+        if cms.is_empty() || chart_config.series.is_empty() {
             return Ok(());
         }
 
         let mut labels = vec![];
         let mut datasets = vec![];
-        for (i, series) in graph.series.iter().enumerate() {
+        for (i, series) in chart_config.series.iter().enumerate() {
             if i == 0 {
                 let value = cms[0].store.get(&series.label);
                 if let Some(lbs) = value {
@@ -334,9 +436,9 @@ impl GraphRender {
         }
 
         let param = Parameters {
-            options: Default::default(),
+            options: self.config.display.render_options.clone(),
             chart: Chart {
-                chart_type,
+                chart_type: chart_type.into(),
                 data: Data { labels, datasets },
             },
         };
@@ -347,9 +449,10 @@ impl GraphRender {
             .send()
             .await?;
 
-        let mut f = File::create(dest)?;
+        let mut f = File::create(dest.clone())?;
         let mut content = Cursor::new(response.bytes().await?);
         copy(&mut content, &mut f)?;
+        info!("render image: {:?}", dest);
         Ok(())
     }
 }

@@ -1,10 +1,9 @@
-use crate::{AuthorMapping, Database, Gitter, InitAction};
+use crate::{AuthorMapping, CreateAction, Database, Gitter};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Serialize;
-use std::process::exit;
 use std::{
-    path::Path,
+    process::exit,
     sync::{Arc, Mutex},
 };
 use tokio::{sync, time};
@@ -35,7 +34,7 @@ pub struct Record {
 #[async_trait]
 pub trait RecordSerializer {
     fn extension(&self) -> String;
-    async fn serialize(&self, config: InitAction) -> Result<()>;
+    async fn serialize(&self, config: CreateAction) -> Result<()>;
 }
 
 static BUFFER_SIZE: usize = 1000;
@@ -185,7 +184,7 @@ impl<T: 'static + Gitter + Clone> RecordSerializer for CsvSerializer<T> {
         String::from("csv")
     }
 
-    async fn serialize(&self, config: InitAction) -> Result<()> {
+    async fn serialize(&self, config: CreateAction) -> Result<()> {
         let mut handles = vec![];
         for database in config.databases {
             let gitter = self.gitter.clone();

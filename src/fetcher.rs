@@ -1,8 +1,7 @@
 use crate::{config, Repository};
 use anyhow::Result;
 use serde::Deserialize;
-use std::process::exit;
-use std::{fs::File, path::Path};
+use std::{fs::File, path::Path, process::exit};
 use tokio::time;
 use tracing::{error, info};
 
@@ -50,7 +49,11 @@ impl RepoFetcher {
                     }
                     Ok(f) => f,
                 };
-                serde_yaml::to_writer(f, &repos).unwrap();
+
+                if let Err(e) = serde_yaml::to_writer(f, &repos) {
+                    error!("failed to unmarshal serde object, err: {}", e);
+                    exit(1)
+                };
                 info!("save database file '{}'", &config.destination);
             });
             handles.push(handle);
@@ -61,7 +64,7 @@ impl RepoFetcher {
         }
 
         info!(
-            "all github repositories have been fetched, elapsed: {:#?}",
+            "[github]: all repositories have been fetched, elapsed: {:#?}",
             now.elapsed()
         );
         Ok(())
@@ -147,6 +150,7 @@ impl GithubRepoFetcher {
                 }
             }
         }
+        info!("[github]: fetch total {} repositories", repos.len());
         Ok(repos)
     }
 }

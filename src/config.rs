@@ -1,10 +1,12 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::{fs::File, path::Path};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct InitAction {
+pub struct CreateAction {
     pub author_mappings: Option<Vec<AuthorMapping>>,
     pub databases: Vec<Database>,
 }
@@ -110,15 +112,15 @@ pub struct RenderAction {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Display {
     pub destination: String,
-    pub console_only: bool,
+    pub render_mode: String,
     pub render_api: String,
-    pub render_options: GraphOptions,
+    pub render_options: ChartOptions,
     pub queries: Vec<Query>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GraphOptions {
-    #[serde(rename(serialize = "backgroundColor", deserialize = "background_color"))]
+pub struct ChartOptions {
+    #[serde(rename(serialize = "backgroundColor"))]
     pub background_color: String,
     pub width: i32,
     pub height: i32,
@@ -128,11 +130,11 @@ pub struct GraphOptions {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Query {
     pub statements: Vec<String>,
-    pub graph: Graph,
+    pub chart: Chart,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct Graph {
+pub struct Chart {
     #[serde(rename(deserialize = "type"))]
     pub chart_type: String,
     pub name: String,
@@ -149,7 +151,7 @@ pub struct Series {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
-    pub init: InitAction,
+    pub create: CreateAction,
     pub fetch: FetchAction,
     pub shell: ShellAction,
     pub render: RenderAction,

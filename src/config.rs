@@ -140,14 +140,7 @@ pub struct Chart {
     pub chart_type: String,
     pub name: String,
     pub options: Option<Value>,
-    pub series: Vec<Series>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct Series {
-    pub legend: String,
-    pub label: String,
-    pub dataset: String,
+    pub data: Value,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

@@ -5,8 +5,8 @@ use datafusion::{
     arrow::{array, datatypes::DataType},
     prelude::ExecutionContext,
 };
-use serde::{Serialize, Serializer};
-use serde_yaml::Value;
+use serde::Serialize;
+use serde_yaml::{Number, Value};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -14,31 +14,12 @@ use std::{
     io::{copy, Cursor},
     path::{Path, PathBuf},
 };
+use tokio::time;
 use tracing::info;
-
-#[derive(Debug, Clone)]
-pub enum ColumnType {
-    Float64(f64),
-    Int64(i64),
-    String(String),
-}
-
-impl Serialize for ColumnType {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            ColumnType::Float64(v) => serializer.serialize_f64(*v),
-            ColumnType::Int64(v) => serializer.serialize_i64(*v),
-            ColumnType::String(v) => serializer.serialize_str(v.as_str()),
-        }
-    }
-}
 
 #[derive(Debug, Serialize)]
 pub struct ColumnMap {
-    pub store: HashMap<String, Vec<ColumnType>>,
+    store: HashMap<String, Vec<Value>>,
 }
 
 impl ColumnMap {
@@ -46,6 +27,14 @@ impl ColumnMap {
         Self {
             store: HashMap::new(),
         }
+    }
+
+    fn get(&self, k: &str) -> Option<Value> {
+        let mut values = vec![];
+        for v in self.store.get(k)? {
+            values.push(v.clone())
+        }
+        Some(Value::Sequence(values))
     }
 }
 
@@ -84,8 +73,8 @@ impl Engine {
                             data.downcast_ref::<array::StringArray>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::String(x.unwrap().to_string()))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::String(x.unwrap().to_string()))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -95,8 +84,8 @@ impl Engine {
                             data.downcast_ref::<array::Float64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as f64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -106,8 +95,8 @@ impl Engine {
                             data.downcast_ref::<array::Float32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Float64(x.unwrap() as f64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as f64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -117,8 +106,8 @@ impl Engine {
                             data.downcast_ref::<array::UInt64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -128,8 +117,8 @@ impl Engine {
                             data.downcast_ref::<array::Int64Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap()))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -139,8 +128,8 @@ impl Engine {
                             data.downcast_ref::<array::UInt32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -150,8 +139,8 @@ impl Engine {
                             data.downcast_ref::<array::Int32Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -161,8 +150,8 @@ impl Engine {
                             data.downcast_ref::<array::UInt16Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -172,8 +161,8 @@ impl Engine {
                             data.downcast_ref::<array::Int16Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as i16)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -183,8 +172,8 @@ impl Engine {
                             data.downcast_ref::<array::UInt8Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -194,8 +183,8 @@ impl Engine {
                             data.downcast_ref::<array::Int8Array>()
                                 .unwrap()
                                 .iter()
-                                .map(|x| ColumnType::Int64(x.unwrap() as i64))
-                                .collect::<Vec<ColumnType>>(),
+                                .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
+                                .collect::<Vec<Value>>(),
                         );
                     }
 
@@ -254,10 +243,11 @@ impl ResultRender for TableRender {
         let queries = display.queries.clone();
         for query in queries {
             for sql in query.statements {
+                let now = time::Instant::now();
                 println!("SQL: {}", sql);
                 let df = self.ctx.sql(&sql).await?;
                 df.show().await?;
-                println!()
+                println!("Query OK, elapsed: {:#?}", now.elapsed())
             }
         }
         Ok(())
@@ -300,49 +290,26 @@ impl ResultRender for ChartRender {
             for sql in query.statements {
                 cms.push(self.engine.select(&sql).await.unwrap())
             }
-
             if query.chart.is_none() {
-                return Ok(());
+                continue;
             }
-            let chart_config = query.chart.unwrap();
 
+            let chart_config = query.chart.unwrap();
             let dest = Path::new(display_config.destination.as_str()).join(format!(
                 "{}.{}",
                 chart_config.name, display_config.render_config.format
             ));
-
-            let t = chart_config.chart_type.as_str();
-            match ChartType::from(t) {
-                ChartType::Bar => {
-                    self.render_bar_chart(chart_config, cms, dest).await?;
-                }
-                ChartType::Line => {
-                    self.render_line_chart(chart_config, cms, dest).await?;
-                }
-                ChartType::Unsupported => return Err(anyhow!("unsupported chart type '{}'", t)),
-            }
+            self.render_chart(chart_config, cms, dest).await?;
         }
         Ok(())
     }
 }
 
 #[derive(Debug, Serialize)]
-pub struct Data {
-    pub labels: Vec<ColumnType>,
-    pub datasets: Vec<Dataset>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Dataset {
-    label: String,
-    data: Vec<ColumnType>,
-}
-
-#[derive(Debug, Serialize)]
 struct Chart {
     #[serde(rename(serialize = "type"))]
     chart_type: String,
-    data: Data,
+    data: Value,
     options: Value,
 }
 
@@ -353,100 +320,59 @@ struct Parameters {
     chart: Chart,
 }
 
-enum ChartType {
-    Bar,
-    Line,
-    Unsupported,
-}
-
-impl From<&str> for ChartType {
-    fn from(s: &str) -> Self {
-        match s {
-            "bar" => ChartType::Bar,
-            "line" => ChartType::Line,
-            _ => ChartType::Unsupported,
-        }
-    }
-}
-
-impl From<ChartType> for String {
-    fn from(ct: ChartType) -> Self {
-        match ct {
-            ChartType::Bar => String::from("bar"),
-            ChartType::Line => String::from("line"),
-            ChartType::Unsupported => String::from("Unsupported"),
-        }
-    }
-}
+static KEY_LABELS: &str = "labels";
+static KEY_DATASETS: &str = "datasets";
+static KET_DATA: &str = "data";
 
 impl ChartRender {
-    async fn render_bar_chart(
-        &mut self,
-        chart_config: config::Chart,
-        cms: Vec<ColumnMap>,
-        dest: PathBuf,
-    ) -> Result<()> {
-        self.render_2d_axis_chart(ChartType::Bar, chart_config, cms, dest)
-            .await
+    fn parse_variable(&self, s: String) -> Option<(usize, String)> {
+        let l = s.find("${")?;
+        let r = s.find('}')?;
+
+        if r > l + 2 {
+            let var = s[l + 2..r].to_string();
+            let fields = var.splitn(2, ':').collect::<Vec<&str>>();
+            if fields.len() < 2 {
+                return None;
+            }
+            if let Ok(index) = fields[0].parse::<usize>() {
+                return Some((index, fields[1].to_string()));
+            }
+        }
+        None
     }
 
-    async fn render_line_chart(
+    async fn render_chart(
         &mut self,
         chart_config: config::Chart,
         cms: Vec<ColumnMap>,
         dest: PathBuf,
     ) -> Result<()> {
-        self.render_2d_axis_chart(ChartType::Line, chart_config, cms, dest)
-            .await
-    }
-
-    async fn render_2d_axis_chart(
-        &mut self,
-        chart_type: ChartType,
-        chart_config: config::Chart,
-        cms: Vec<ColumnMap>,
-        dest: PathBuf,
-    ) -> Result<()> {
-        if cms.is_empty() || chart_config.series.is_empty() {
+        if cms.is_empty() {
             return Ok(());
         }
 
-        let mut labels = vec![];
-        let mut datasets = vec![];
-        for (i, series) in chart_config.series.iter().enumerate() {
-            if i == 0 {
-                let value = cms[0].store.get(&series.label);
-                if let Some(lbs) = value {
-                    labels = lbs.to_vec()
-                }
-            }
+        let mut data_section = chart_config.data.clone();
+        let mappings = data_section.as_mapping_mut();
+        if mappings.is_none() {
+            return Err(anyhow!("data section should be mappings type"));
+        }
 
-            let mut index: usize = 0;
-            let mut dataset = &*series.dataset.clone();
-            let fields: Vec<&str> = series.dataset.split(':').collect();
-            if fields.len() > 1 {
-                index = fields[0].parse::<usize>().unwrap_or_default();
-                dataset = fields[1];
+        for (key, val) in mappings.unwrap() {
+            let key = key.as_str().unwrap_or_default();
+            if key == KEY_LABELS {
+                self.handle_labels_section(val, &cms);
             }
-            if index >= cms.len() {
-                index = 0
-            }
-
-            let legend = series.legend.clone();
-            let value = cms[index].store.get(dataset);
-            if let Some(vs) = value {
-                datasets.push(Dataset {
-                    label: legend,
-                    data: vs.to_vec(),
-                })
+            if key == KEY_DATASETS {
+                self.handle_datasets_section(val, &cms);
             }
         }
 
         let param = Parameters {
             conf: self.config.display.render_config.clone(),
             chart: Chart {
-                chart_type: chart_type.into(),
-                data: Data { labels, datasets },
+                chart_type: chart_config.chart_type,
+                data: data_section,
                 options: chart_config.options.unwrap_or_default(),
             },
         };
@@ -462,5 +388,48 @@ impl ChartRender {
         copy(&mut content, &mut f)?;
         info!("render image: {:?}", dest);
         Ok(())
+    }
+
+    fn handle_labels_section(&mut self, val: &mut Value, cms: &[ColumnMap]) -> Option<()> {
+        let pattern = val.as_str().unwrap_or_default();
+        let col = self.parse_variable(pattern.to_string())?;
+        let (index, variable) = col;
+        if index < cms.len() {
+            if let Some(v) = cms[index].get(&variable) {
+                *val = v;
+            }
+        }
+        Some(())
+    }
+
+    fn handle_datasets_section(&mut self, val: &mut Value, cms: &[ColumnMap]) -> Option<()> {
+        let seq = val.as_sequence_mut()?;
+        for obj in seq {
+            let obj = obj.as_mapping_mut();
+            if obj.is_none() {
+                continue;
+            }
+
+            for (obj_key, obj_val) in obj.unwrap() {
+                let obj_key = obj_key.as_str().unwrap_or_default();
+                if obj_key != KET_DATA {
+                    continue;
+                }
+
+                let pattern = obj_val.as_str().unwrap_or_default();
+                let col = self.parse_variable(pattern.to_string());
+                if col.is_none() {
+                    continue;
+                }
+
+                let (index, variable) = col.unwrap();
+                if index < cms.len() {
+                    if let Some(v) = cms[index].get(&variable) {
+                        *obj_val = v.clone();
+                    }
+                }
+            }
+        }
+        Some(())
     }
 }

@@ -1,4 +1,4 @@
-use crate::{config, ChartConfig};
+use crate::{config, RenderConfig};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use datafusion::{
@@ -11,9 +11,10 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     fs::File,
-    io::{copy, Cursor},
+    io::{copy, Cursor, Write},
     path::{Path, PathBuf},
 };
+use tera::{Context, Tera};
 use tokio::time;
 use tracing::info;
 
@@ -187,7 +188,6 @@ impl Engine {
                                 .collect::<Vec<Value>>(),
                         );
                     }
-
                     _ => (),
                 }
             }
@@ -199,7 +199,8 @@ impl Engine {
 
 enum RenderMode {
     Table,
-    Chart,
+    Image,
+    Html,
     Unsupported,
 }
 
@@ -207,7 +208,8 @@ impl From<&str> for RenderMode {
     fn from(s: &str) -> Self {
         match s {
             "table" => RenderMode::Table,
-            "chart" => RenderMode::Chart,
+            "image" => RenderMode::Image,
+            "html" => RenderMode::Html,
             _ => RenderMode::Unsupported,
         }
     }
@@ -220,7 +222,9 @@ pub trait ResultRender {
 
 pub fn create_render(ctx: ExecutionContext, config: config::RenderAction) -> Box<dyn ResultRender> {
     match RenderMode::from(config.display.render_mode.as_str()) {
-        RenderMode::Chart => Box::new(ChartRender::new(ctx, config)),
+        mode @ (RenderMode::Image | RenderMode::Html) => {
+            Box::new(ChartRender::new(mode, ctx, config))
+        }
         RenderMode::Table | RenderMode::Unsupported => Box::new(TableRender::new(ctx, config)),
     }
 }
@@ -254,28 +258,45 @@ impl ResultRender for TableRender {
     }
 }
 
-static DEFAULT_API: &str = "https://quickchart.io";
-
 struct ChartRender {
+    mode: RenderMode,
     api: String,
     config: config::RenderAction,
     engine: Engine,
 }
 
 impl ChartRender {
-    fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
-        let route = "/chart";
-        let api = config.display.render_api.clone();
-        let api = if api.is_empty() {
-            DEFAULT_API.to_owned() + route
-        } else {
-            api + route
-        };
+    fn new(mode: RenderMode, ctx: ExecutionContext, config: config::RenderAction) -> Self {
+        let dependency = config.display.dependency.clone().unwrap_or_default();
+        match mode {
+            RenderMode::Image => {
+                let route = "/chart";
+                let api = dependency.quickchart_api + route;
+                Self {
+                    mode,
+                    api,
+                    config,
+                    engine: Engine::new(ctx),
+                }
+            }
+            RenderMode::Html => {
+                let api = dependency.chart_js;
+                Self {
+                    mode,
+                    api,
+                    config,
+                    engine: Engine::new(ctx),
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
 
-        Self {
-            api,
-            config,
-            engine: Engine::new(ctx),
+    fn extension(&self) -> String {
+        match self.mode {
+            RenderMode::Image => self.config.display.render_config.format.clone(),
+            RenderMode::Html => "html".to_string(),
+            _ => unreachable!(),
         }
     }
 }
@@ -295,10 +316,8 @@ impl ResultRender for ChartRender {
             }
 
             let chart_config = query.chart.unwrap();
-            let dest = Path::new(display_config.destination.as_str()).join(format!(
-                "{}.{}",
-                chart_config.name, display_config.render_config.format
-            ));
+            let dest =
+                Path::new(display_config.destination.as_str()).join(chart_config.name.clone());
             self.render_chart(chart_config, cms, dest).await?;
         }
         Ok(())
@@ -316,13 +335,21 @@ struct Chart {
 #[derive(Debug, Serialize)]
 struct Parameters {
     #[serde(flatten)]
-    conf: ChartConfig,
+    conf: RenderConfig,
     chart: Chart,
+}
+
+impl Parameters {
+    pub fn json_content(&self) -> String {
+        serde_json::to_string(&self.chart).unwrap_or_default()
+    }
 }
 
 static KEY_LABELS: &str = "labels";
 static KEY_DATASETS: &str = "datasets";
 static KET_DATA: &str = "data";
+
+static CHART_TEMPLATE: &str = include_str!("../static/chart.tpl.html");
 
 impl ChartRender {
     fn parse_variable(&self, s: String) -> Option<(usize, String)> {
@@ -344,9 +371,9 @@ impl ChartRender {
 
     async fn render_chart(
         &mut self,
-        chart_config: config::Chart,
+        chart_config: config::ChartConfig,
         cms: Vec<ColumnMap>,
-        dest: PathBuf,
+        mut dest: PathBuf,
     ) -> Result<()> {
         if cms.is_empty() {
             return Ok(());
@@ -377,16 +404,35 @@ impl ChartRender {
             },
         };
 
-        let response = reqwest::Client::new()
-            .post(&self.api)
-            .json(&param)
-            .send()
-            .await?;
+        dest.set_extension(self.extension());
+        match self.mode {
+            RenderMode::Html => {
+                let mut ctx = Context::new();
+                ctx.insert("title", &chart_config.name);
+                ctx.insert("config", &param.json_content());
+                ctx.insert("chart_id", &chart_config.name);
+                ctx.insert("chart_js", &self.api);
 
-        let mut f = File::create(dest.clone())?;
-        let mut content = Cursor::new(response.bytes().await?);
-        copy(&mut content, &mut f)?;
-        info!("render image: {:?}", dest);
+                let mut f = File::create(dest.clone())?;
+                let content = Tera::default().render_str(CHART_TEMPLATE, &ctx)?;
+                f.write_all(content.as_bytes())?;
+                info!("render html: {:?}", dest);
+            }
+            RenderMode::Image => {
+                let response = reqwest::Client::new()
+                    .post(&self.api)
+                    .json(&param)
+                    .send()
+                    .await?;
+
+                let mut f = File::create(dest.clone())?;
+                let mut content = Cursor::new(response.bytes().await?);
+                copy(&mut content, &mut f)?;
+                info!("render image: {:?}", dest);
+            }
+
+            _ => unreachable!(),
+        }
         Ok(())
     }
 

@@ -122,14 +122,14 @@ impl GithubRepoFetcher {
                 let mut ignore = false;
                 for excluded in exclude_orgs.iter() {
                     if repo.full_name.starts_with(excluded) {
-                        info!("[exclude_orgs] skip repo '{}' ", repo.full_name);
+                        info!("[excludeOrgs] skip repo '{}' ", repo.full_name);
                         ignore = true;
                         break;
                     }
                 }
                 for excluded in exclude_repos.iter() {
                     if repo.full_name.starts_with(excluded) {
-                        info!("[exclude_repos] skip repo '{}' ", repo.full_name);
+                        info!("[excludeRepos] skip repo '{}' ", repo.full_name);
                         ignore = true;
                         break;
                     }

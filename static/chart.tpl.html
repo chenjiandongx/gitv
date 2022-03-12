@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <script src="{{ chart_js }}"></script>
+</head>
+
+<body>
+    <div>
+        <canvas id="{{ chart_id }}"></canvas>
+    </div>
+    <script>
+        const myChart = new Chart(
+            document.getElementById('{{ chart_id }}'),
+            {{ config }}
+    );
+    </script>
+</body>
+
+</html>

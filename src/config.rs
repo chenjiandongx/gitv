@@ -7,6 +7,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateAction {
     pub author_mappings: Option<Vec<AuthorMapping>>,
     pub databases: Vec<Database>,
@@ -41,6 +42,7 @@ impl Author {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Database {
     pub table_name: String,
     pub base_dir: String,
@@ -83,6 +85,7 @@ pub struct FetchAction {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Github {
     pub base_dir: String,
     pub destination: String,
@@ -99,6 +102,7 @@ pub struct ShellAction {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Execution {
     pub table_name: String,
     pub file: String,
@@ -111,17 +115,34 @@ pub struct RenderAction {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Display {
     pub destination: String,
     pub render_mode: String,
-    pub render_api: String,
-    pub render_config: ChartConfig,
+    pub dependency: Option<Dependency>,
+    pub render_config: RenderConfig,
     pub queries: Vec<Query>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Dependency {
+    pub quickchart_api: String,
+    pub chart_js: String,
+}
+
+impl Default for Dependency {
+    fn default() -> Self {
+        Self {
+            quickchart_api: String::from("https://quickchart.io"),
+            chart_js: String::from("https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ChartConfig {
-    #[serde(rename(serialize = "backgroundColor"))]
+#[serde(rename_all = "camelCase")]
+pub struct RenderConfig {
     pub background_color: String,
     pub width: i32,
     pub height: i32,
@@ -131,11 +152,11 @@ pub struct ChartConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Query {
     pub statements: Vec<String>,
-    pub chart: Option<Chart>,
+    pub chart: Option<ChartConfig>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct Chart {
+pub struct ChartConfig {
     #[serde(rename(deserialize = "type"))]
     pub chart_type: String,
     pub name: String,

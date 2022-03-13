@@ -14,7 +14,6 @@ use std::{
     fmt::Debug,
     fs::File,
     io::Write,
-    ops::Range,
     path::{Path, PathBuf},
 };
 use tera::{Context, Tera};
@@ -276,8 +275,10 @@ impl ResultRender for ChartRender {
     async fn render(&mut self) -> Result<()> {
         let display_config = self.config.display.clone();
         let queries = display_config.queries.clone();
-        for query in queries {
+        let total = queries.len();
+        for (index, query) in queries.into_iter().enumerate() {
             let mut cms = vec![];
+            let now = time::Instant::now();
             for sql in query.statements {
                 cms.push(self.engine.select(&sql).await.unwrap())
             }
@@ -286,8 +287,16 @@ impl ResultRender for ChartRender {
             }
 
             let chart_config = query.chart.unwrap();
-            let dest = Path::new(&display_config.destination).join(chart_config.name.clone());
-            self.render_chart(chart_config, cms, dest).await?;
+            let mut dest = Path::new(&display_config.destination).join(chart_config.name.clone());
+            dest.set_extension("html");
+            self.render_chart(chart_config, cms, &dest).await?;
+            info!(
+                "[{}/{}] render file {} => elapsed {:#?}",
+                index+1,
+                total,
+                dest.to_str().unwrap_or_default(),
+                now.elapsed(),
+            )
         }
         Ok(())
     }
@@ -369,7 +378,7 @@ impl ChartRender {
         &mut self,
         chart_config: config::ChartConfig,
         cms: Vec<ColumnMap>,
-        mut dest: PathBuf,
+        dest: &PathBuf,
     ) -> Result<()> {
         if cms.is_empty() {
             return Ok(());
@@ -396,8 +405,6 @@ impl ChartRender {
         })
         .unwrap_or_default();
 
-        dest.set_extension("html");
-
         let mut ctx = Context::new();
         ctx.insert("width", &chart_config.width);
         ctx.insert("height", &chart_config.height);
@@ -412,7 +419,6 @@ impl ChartRender {
         let mut f = File::create(dest.clone())?;
         let content = Tera::default().render_str(TEMPLATE_CHART, &ctx)?;
         f.write_all(self.cleanup_content(content).as_bytes())?;
-        info!("render html: {:?}", dest);
         Ok(())
     }
 
@@ -463,10 +469,10 @@ impl ChartRender {
         for (key, val) in mappings {
             let key = key.as_str().unwrap_or_default();
             if key == KEY_LABELS {
-                self.handle_labels_field(val, &cms);
+                self.handle_labels_field(val, cms);
             }
             if key == KEY_DATASETS {
-                self.handle_datasets_field(val, &cms);
+                self.handle_datasets_field(val, cms);
             }
         }
     }
@@ -520,7 +526,7 @@ impl ChartRender {
         if var == VALUE_RANDOM {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
-            return Some(COLORS.values().skip(n % COLORS.len()).next()?);
+            return Some(COLORS.values().nth(n % COLORS.len())?);
         }
         Some(COLORS.get(&var)?)
     }

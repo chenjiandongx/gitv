@@ -63,7 +63,7 @@ struct Cli {
     shell: bool,
 
     /// docs here
-    path: String,
+    path: Option<String>,
 }
 
 #[tokio::main]
@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
     setup_logger();
 
     let cli: Cli = Cli::parse();
-    let c: Config = match config::load_config(&cli.path) {
+    let c: Config = match config::load_config(&cli.path.unwrap_or("gitx.yaml".to_string())) {
         Err(e) => {
             error!("load config error: {}", e);
             exit(1);

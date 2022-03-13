@@ -120,33 +120,55 @@ pub struct Display {
     pub destination: String,
     pub render_mode: String,
     pub dependency: Option<Dependency>,
-    pub render_config: RenderConfig,
     pub queries: Vec<Query>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Dependency {
-    pub quickchart_api: String,
-    pub chart_js: String,
+    chartjs: String,
+    stacked100: String,
+    datalabels: String,
+}
+
+impl Dependency {
+    pub fn list(&self) -> Vec<String> {
+        let mut data = vec![];
+        if self.chartjs.is_empty() {
+            data.push(Self::default().chartjs);
+        } else {
+            data.push(self.chartjs.clone())
+        }
+        if !self.stacked100.is_empty() {
+            data.push(self.stacked100.clone())
+        }
+        if !self.datalabels.is_empty() {
+            data.push(self.datalabels.clone())
+        }
+        data
+    }
+
+    pub fn register(&self) -> Vec<String> {
+        let mut data = vec![];
+        if !self.stacked100.is_empty() {
+            data.push("Chart.register(ChartjsPluginStacked100)".to_string());
+        }
+        if !self.datalabels.is_empty() {
+            data.push("Chart.register(ChartDataLabels)".to_string());
+        }
+        data
+    }
 }
 
 impl Default for Dependency {
     fn default() -> Self {
         Self {
-            quickchart_api: String::from("https://quickchart.io"),
-            chart_js: String::from("https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js"),
+            chartjs: String::from("https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js"),
+            stacked100: String::from("https://cdn.jsdelivr.net/npm/chartjs-plugin-stacked100@1.0"),
+            datalabels: String::from(
+                "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0",
+            ),
         }
     }
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RenderConfig {
-    pub background_color: String,
-    pub width: i32,
-    pub height: i32,
-    pub format: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -159,6 +181,8 @@ pub struct Query {
 pub struct ChartConfig {
     #[serde(rename(deserialize = "type"))]
     pub chart_type: String,
+    pub width: String,
+    pub height: String,
     pub name: String,
     pub options: Option<Value>,
     pub data: Value,

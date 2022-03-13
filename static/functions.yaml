@@ -1,0 +1,1 @@
+percentage: "{{% function (value,context){var hiddens=context.chart._hiddenIndices;var total=0;var datapoints=context.dataset.data;datapoints.forEach((val,i)=>{if(hiddens[i]!=undefined){if(!hiddens[i]){total+=val}}else{total+=val}});var percentage=(value/total*100).toFixed(2)+'%';var out=context.chart.data.labels[context.dataIndex]+'\n'+percentage;return out},%}}"

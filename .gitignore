@@ -19,6 +19,7 @@ Cargo.lock
 .vscode/
 .DS_Store
 database/
-*.yaml
+private.yaml
 *.png
 *.svg
+*.html

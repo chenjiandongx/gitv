@@ -4,14 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
-    <script src="{{ chart_js }}"></script>
+    {%- for dep in dependencies %}
+    <script src="{{ dep }}"></script>
+    {%- endfor %}
 </head>
 
 <body>
     <div>
-        <canvas id="{{ chart_id }}"></canvas>
+        <canvas id="{{ chart_id }}" width="{{ width }}" height="{{ height }}"></canvas>
     </div>
     <script>
+        {%- for reg in register %}
+        {{ reg | safe }}
+        {%- endfor %}
         const myChart = new Chart(
             document.getElementById('{{ chart_id }}'),
             {{ config }}

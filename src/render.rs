@@ -71,124 +71,124 @@ impl Engine {
                 let name = field.name().to_string();
                 match field.data_type() {
                     DataType::Utf8 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::StringArray>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::String(x.unwrap().to_string()))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::StringArray>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::String(x.unwrap().to_string()))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::Float64 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::Float64Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as f64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::Float64Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as f64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::Float32 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::Float32Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as f64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::Float32Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as f64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::UInt64 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::UInt64Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::UInt64Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::Int64 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::Int64Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::Int64Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::UInt32 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::UInt32Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::UInt32Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::Int32 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::Int32Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::Int32Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::UInt16 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::UInt16Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::UInt16Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::Int16 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::Int16Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as i16)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::Int16Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as i16)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::UInt8 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::UInt8Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::UInt8Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as u64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
 
                     DataType::Int8 => {
-                        cm.store.insert(
-                            name,
-                            data.downcast_ref::<array::Int8Array>()
-                                .unwrap()
-                                .iter()
-                                .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
-                                .collect::<Vec<Value>>(),
-                        );
+                        let downcast = data
+                            .downcast_ref::<array::Int8Array>()
+                            .unwrap()
+                            .iter()
+                            .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
+                            .collect::<Vec<Value>>();
+                        let v = cm.store.entry(name).or_insert(vec![]);
+                        v.extend(downcast)
                     }
                     _ => (),
                 }
@@ -249,7 +249,7 @@ impl ResultRender for TableRender {
                 println!("SQL: {}", sql);
                 let df = self.ctx.sql(&sql).await?;
                 df.show().await?;
-                println!("Query OK, elapsed: {:#?}", now.elapsed())
+                println!("Query OK, elapsed: {:#?}\n", now.elapsed())
             }
         }
         Ok(())
@@ -292,7 +292,7 @@ impl ResultRender for ChartRender {
             self.render_chart(chart_config, cms, &dest).await?;
             info!(
                 "[{}/{}] render file {} => elapsed {:#?}",
-                index+1,
+                index + 1,
                 total,
                 dest.to_str().unwrap_or_default(),
                 now.elapsed(),
@@ -423,9 +423,7 @@ impl ChartRender {
     }
 
     fn cleanup_content(&self, s: String) -> String {
-        s.replace(r#""{{%"#, "")
-            .replace(r#"%}}""#, "")
-            .replace(",,", ",")
+        s.replace(r#""{{%"#, "").replace(r#"%}}""#, "")
     }
 
     fn hanlde_options_section(&mut self, mappings: &mut Mapping) {
@@ -526,7 +524,9 @@ impl ChartRender {
         if var == VALUE_RANDOM {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
-            return Some(COLORS.values().nth(n % COLORS.len())?);
+            let k = COLORS.keys().nth(n % COLORS.len())?;
+            info!("random colors select '{}'", k);
+            return Some(COLORS.get(k)?);
         }
         Some(COLORS.get(&var)?)
     }

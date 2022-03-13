@@ -6,12 +6,12 @@ mod record;
 mod render;
 mod shell;
 
-use crate::{fetcher::RepoFetcher, record::CsvSerializer};
 use anyhow::Result;
 use chrono::Local;
 use clap::Parser;
 use config::*;
 use executor::*;
+use fetcher::*;
 use gitter::*;
 use record::*;
 use std::{io, process::exit};
@@ -46,23 +46,23 @@ fn setup_logger() {
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {
-    /// init flag
+    /// Retrieve repos and create new databases
     #[clap(short, long)]
     create: bool,
 
-    /// sync flag
+    /// Fetch repos metadata from remote source (github)
     #[clap(short, long)]
     fetch: bool,
 
-    /// render flag
+    /// Render query result as the given mode (htlm, table)
     #[clap(short, long)]
     render: bool,
 
-    /// shell flag
+    /// Load data and enter into a new spawn shell
     #[clap(short, long)]
     shell: bool,
 
-    /// docs here
+    /// config file path (default: gitx.yaml)
     path: Option<String>,
 }
 

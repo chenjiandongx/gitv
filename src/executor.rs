@@ -28,6 +28,7 @@ lazy_static! {
         udf_weekday,
         udf_week,
         udf_hour,
+        udf_period,
         udf_timestamp,
         udf_timezone,
         udf_duration,
@@ -209,6 +210,47 @@ fn udf_hour() -> ScalarUDF {
         Arc::new(DataType::UInt64),
         Volatility::Immutable,
         hour,
+    )
+}
+
+/// 计算给定时间的状态（午夜、早上、下午以及晚上）
+///
+/// # Example
+/// ```rust
+/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// output: "Afternoon"
+/// ```
+fn udf_period() -> ScalarUDF {
+    let period = |args: &[array::ArrayRef]| {
+        let base = &args[0]
+            .as_any()
+            .downcast_ref::<array::StringArray>()
+            .unwrap();
+        let array = base
+            .iter()
+            .map(|x| {
+                let dt = DateTime::parse_from_rfc2822(x.unwrap()).unwrap().hour();
+                let s = match dt {
+                    0..=7 => String::from("Midnight"),
+                    8..=11 => String::from("Morning"),
+                    12..=18 => String::from("Afternoon"),
+                    19..=23 => String::from("Evening"),
+                    _ => unreachable!()
+                };
+                Some(s)
+            })
+            .collect::<array::StringArray>();
+
+        Ok(Arc::new(array) as array::ArrayRef)
+    };
+
+    let period = make_scalar_function(period);
+    create_udf(
+        "period",
+        vec![DataType::Utf8],
+        Arc::new(DataType::Utf8),
+        Volatility::Immutable,
+        period,
     )
 }
 

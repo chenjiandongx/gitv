@@ -13,10 +13,11 @@ fn history_path() -> Result<PathBuf> {
 
 /// 持续循环读取并执行 sql 语句，监听 `Ctrl+C`、`q`、`Q` 作为退出信号
 pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
-    let history = history_path()?;
-
+    let history = history_path();
     let mut readline = Editor::<()>::new();
-    readline.load_history(&history).unwrap_or(());
+    if let Ok(ref history) = history {
+        readline.load_history(&history).unwrap_or(());
+    }
 
     loop {
         match readline.readline("gitx(sql)> ") {
@@ -49,7 +50,10 @@ pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
         }
     }
 
-    readline
-        .save_history(&history)
-        .context("Failed to save query history")
+    if let Ok(history) = history {
+        return readline
+            .save_history(&history)
+            .context("Failed to save query history")
+    }
+    Ok(())
 }

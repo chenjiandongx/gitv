@@ -273,8 +273,7 @@ impl ChartRender {
 #[async_trait]
 impl ResultRender for ChartRender {
     async fn render(&mut self) -> Result<()> {
-        let display_config = self.config.display.clone();
-        let queries = display_config.queries.clone();
+        let queries = self.config.display.queries.clone();
         let total = queries.len();
         for (index, query) in queries.into_iter().enumerate() {
             let mut cms = vec![];
@@ -287,9 +286,10 @@ impl ResultRender for ChartRender {
             }
 
             let chart_config = query.chart.unwrap();
-            let mut dest = Path::new(&display_config.destination).join(chart_config.name.clone());
+            let mut dest =
+                Path::new(&self.config.display.destination).join(chart_config.name.clone());
             dest.set_extension("html");
-            self.render_chart(chart_config, cms, &dest).await?;
+            self.render_chart(chart_config, &cms, &dest).await?;
             info!(
                 "[{}/{}] render file {} => elapsed {:#?}",
                 index + 1,
@@ -381,7 +381,7 @@ impl ChartRender {
     async fn render_chart(
         &mut self,
         chart_config: config::ChartConfig,
-        cms: Vec<ColumnMap>,
+        cms: &[ColumnMap],
         dest: &PathBuf,
     ) -> Result<()> {
         if cms.is_empty() {
@@ -393,7 +393,7 @@ impl ChartRender {
         if mappings.is_none() {
             return Err(anyhow!("data section should be mappings type"));
         }
-        self.hanlde_data_section(mappings.unwrap(), &cms);
+        self.hanlde_data_section(mappings.unwrap(), cms);
 
         let options_section = chart_config.options.clone();
         let mut options_section = options_section.unwrap_or_default();
@@ -453,8 +453,8 @@ impl ChartRender {
         for (key, val) in mappings {
             let key = key.as_str().unwrap_or_default();
             if key == KEY_FORMATTER {
-                let (_, var) = self.parse_variable(val.as_str().unwrap_or_default())?;
-                let function = FUNCTIONS.get(&var);
+                let var = self.parse_variable(val.as_str().unwrap_or_default())?;
+                let function = FUNCTIONS.get(&var.1);
                 if let Some(f) = function {
                     *val = f.clone();
                 }
@@ -520,15 +520,15 @@ impl ChartRender {
     }
 
     fn handle_colors_field(&mut self, val: &mut Value) -> Option<&[Value]> {
-        let (_, var) = self.parse_variable(val.as_str().unwrap_or_default())?;
-        if var == VALUE_RANDOM {
+        let var = self.parse_variable(val.as_str().unwrap_or_default())?;
+        if var.1 == VALUE_RANDOM {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
             let k = COLORS.keys().nth(n % COLORS.len())?;
             info!("random colors select '{}'", k);
             return Some(COLORS.get(k)?);
         }
-        Some(COLORS.get(&var)?)
+        Some(COLORS.get(&var.1)?)
     }
 }
 
@@ -538,14 +538,14 @@ mod tests {
     #[test]
     fn test_parse_variable() {
         let render = ChartRender::new(ExecutionContext::new(), config::RenderAction::default());
-        let (index, var) = render.parse_variable("${0:foo}").unwrap();
-        assert_eq!((index, var), (0, "foo".to_string()));
+        let var = render.parse_variable("${0:foo}").unwrap();
+        assert_eq!((var.0, var.1), (0, "foo".to_string()));
 
-        let (index, var) = render.parse_variable("${0:foo:bar}").unwrap();
-        assert_eq!((index, var), (0, "foo:bar".to_string()));
+        let var = render.parse_variable("${0:foo:bar}").unwrap();
+        assert_eq!((var.0, var.1), (0, "foo:bar".to_string()));
 
-        let (index, var) = render.parse_variable("${foo}").unwrap();
-        assert_eq!((index, var), (0, "foo".to_string()));
+        let var = render.parse_variable("${foo}").unwrap();
+        assert_eq!((var.0, var.1), (0, "foo".to_string()));
 
         assert_eq!(render.parse_variable("${}"), None);
         assert_eq!(render.parse_variable("${"), None);

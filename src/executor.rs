@@ -18,7 +18,7 @@ use datafusion::{
     scalar::ScalarValue,
 };
 use lazy_static::lazy_static;
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 lazy_static! {
     /// udf 函数集合
@@ -37,7 +37,6 @@ lazy_static! {
 
     /// udaf 函数集合
     static ref UDAFS: Vec<fn() -> AggregateUDF> = vec![
-        udaf_active_days,
         udaf_active_longest_count,
         udaf_active_longest_start,
         udaf_active_longest_end,
@@ -235,7 +234,7 @@ fn udf_period() -> ScalarUDF {
                     8..=11 => String::from("Morning"),
                     12..=18 => String::from("Afternoon"),
                     19..=23 => String::from("Evening"),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
                 Some(s)
             })
@@ -295,7 +294,7 @@ fn udf_timestamp() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// input<arg1: unix timestamp>: 1647272093
 /// output: "30hours 2minutes"
 /// ```
 fn udf_duration() -> ScalarUDF {
@@ -403,24 +402,6 @@ fn udf_time_format() -> ScalarUDF {
         Arc::new(DataType::Utf8),
         Volatility::Immutable,
         date,
-    )
-}
-
-/// 计算某天 commits 数量
-///
-/// # Example
-/// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
-/// output: n
-/// ```
-fn udaf_active_days() -> AggregateUDF {
-    create_udaf(
-        "active_days",
-        DataType::Utf8,
-        Arc::new(DataType::Int64),
-        Volatility::Immutable,
-        Arc::new(|| Ok(Box::new(ActiveDays::new()))),
-        Arc::new(vec![DataType::Int64]),
     )
 }
 
@@ -533,19 +514,6 @@ impl TimeInputAccumulator {
         Ok(vec![values])
     }
 
-    /// 定义如何收集数据
-    fn gather(&mut self, states: &[ScalarValue]) {
-        for state in states {
-            if let ScalarValue::List(Some(values), _) = state {
-                for v in values.iter() {
-                    if let ScalarValue::Int64(i) = v {
-                        self.data.push(i.unwrap())
-                    }
-                }
-            };
-        }
-    }
-
     /// 定义如何更新数据
     fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
         let value = &values[0];
@@ -581,45 +549,6 @@ impl TimeInputAccumulator {
         });
 
         self.merge(&data)
-    }
-}
-
-#[derive(Debug)]
-struct ActiveDays {
-    tla: TimeInputAccumulator,
-}
-
-impl ActiveDays {
-    fn new() -> Self {
-        Self {
-            tla: TimeInputAccumulator::new(),
-        }
-    }
-}
-
-impl Accumulator for ActiveDays {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        self.tla.state()
-    }
-
-    fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
-        self.tla.update(values)
-    }
-
-    fn merge(&mut self, states: &[ScalarValue]) -> Result<()> {
-        self.tla.gather(states);
-        let mut set: HashSet<String> = HashSet::new();
-        for v in self.tla.data.iter() {
-            let s = Utc.timestamp(*v, 0).format("%Y-%m-%d").to_string();
-            set.insert(s);
-        }
-
-        self.tla.n = set.len() as i64;
-        Ok(())
-    }
-
-    fn evaluate(&self) -> Result<ScalarValue> {
-        Ok(ScalarValue::from(self.tla.n as i64))
     }
 }
 
@@ -702,7 +631,7 @@ impl ActiveLongest {
             if let ScalarValue::List(Some(values), _) = state {
                 for v in values.iter() {
                     if let ScalarValue::Int64(i) = v {
-                        self.tla.data.push(i.unwrap())
+                        self.tla.data.push(i.unwrap());
                     }
                 }
             };
@@ -780,14 +709,22 @@ impl Accumulator for ActiveLongestTime {
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {
-        let s = Utc.timestamp(self.al.tla.n, 0) + Duration::days(1);
-        let s = s.format("%Y-%m-%d").to_string();
+        let s = Utc
+            .timestamp(self.al.tla.n, 0)
+            .format("%Y-%m-%d")
+            .to_string();
         Ok(ScalarValue::from(s.as_str()))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use datafusion::{
+        arrow,
+        arrow::{array::Array, datatypes::Schema, record_batch::RecordBatch},
+        datasource::MemTable,
+    };
+
     use super::*;
     #[test]
     fn test_active_longest() {
@@ -809,5 +746,309 @@ mod tests {
 
         let data = &[1, 2, 3, 4, 5, 9, 20, 21, 22, 23, 24];
         assert_eq!((5, 1, 5), active_longest.calc_longest(data, 1));
+    }
+
+    fn get_datetime_context() -> ExecutionContext {
+        let mut ctx = ExecutionContext::new();
+        let datetime_array: array::LargeStringArray = vec![
+            "Tue, 2 May 2017 09:33:29 +0800",
+            "Sat, 1 Sep 2018 16:22:22 +0800",
+            "Sun, 2 Sep 2018 19:15:18 +0800",
+            "Mon, 25 Jun 2018 00:03:36 +0800",
+        ]
+        .into_iter()
+        .map(Some)
+        .collect();
+        let datetime_array = Arc::new(datetime_array);
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "datetime",
+            datetime_array.data_type().clone(),
+            false,
+        )]));
+
+        for udf in UDFS.iter() {
+            ctx.register_udf(udf());
+        }
+        for udaf in UDAFS.iter() {
+            ctx.register_udaf(udaf())
+        }
+
+        let batch = RecordBatch::try_new(schema.clone(), vec![datetime_array]).unwrap();
+        let provider = MemTable::try_new(schema.clone(), vec![vec![batch]]).unwrap();
+        ctx.register_table("repo", Arc::new(provider)).unwrap();
+        ctx
+    }
+
+    #[tokio::test]
+    async fn test_udf_year() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select year(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+---------------------+",
+            "| year(repo.datetime) |",
+            "+---------------------+",
+            "| 2017                |",
+            "| 2018                |",
+            "| 2018                |",
+            "| 2018                |",
+            "+---------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_month() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select month(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+----------------------+",
+            "| month(repo.datetime) |",
+            "+----------------------+",
+            "| 5                    |",
+            "| 6                    |",
+            "| 9                    |",
+            "| 9                    |",
+            "+----------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_weekday() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select weekday(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+------------------------+",
+            "| weekday(repo.datetime) |",
+            "+------------------------+",
+            "| Mon                    |",
+            "| Sat                    |",
+            "| Sun                    |",
+            "| Tue                    |",
+            "+------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_week() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select week(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+---------------------+",
+            "| week(repo.datetime) |",
+            "+---------------------+",
+            "| 0                   |",
+            "| 1                   |",
+            "| 5                   |",
+            "| 6                   |",
+            "+---------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_hour() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select hour(datetime) as hour from repo order by hour;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+------+", "| hour |", "+------+", "| 0    |", "| 9    |", "| 16   |", "| 19   |",
+            "+------+",
+        ];
+        datafusion::assert_batches_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_period() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select period(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+-----------------------+",
+            "| period(repo.datetime) |",
+            "+-----------------------+",
+            "| Afternoon             |",
+            "| Evening               |",
+            "| Midnight              |",
+            "| Morning               |",
+            "+-----------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_timestamp() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select timestamp(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+--------------------------+",
+            "| timestamp(repo.datetime) |",
+            "+--------------------------+",
+            "| 1493688809               |",
+            "| 1529856216               |",
+            "| 1535790142               |",
+            "| 1535886918               |",
+            "+--------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_timezone() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select timezone(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+-------------------------+",
+            "| timezone(repo.datetime) |",
+            "+-------------------------+",
+            "| +08:00                  |",
+            "| +08:00                  |",
+            "| +08:00                  |",
+            "| +08:00                  |",
+            "+-------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_time_format() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select time_format(datetime, '%Y-%m-%d %H:%M:%S') as t from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+---------------------+",
+            "| t                   |",
+            "+---------------------+",
+            "| 2017-05-02 09:33:29 |",
+            "| 2018-06-25 00:03:36 |",
+            "| 2018-09-01 16:22:22 |",
+            "| 2018-09-02 19:15:18 |",
+            "+---------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udaf_active_longest_count() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select active_longest_count(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+-------------------------------------+",
+            "| active_longest_count(repo.datetime) |",
+            "+-------------------------------------+",
+            "| 2                                   |",
+            "+-------------------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udaf_active_longest_start() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select active_longest_start(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+-------------------------------------+",
+            "| active_longest_start(repo.datetime) |",
+            "+-------------------------------------+",
+            "| 2018-09-01                          |",
+            "+-------------------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udaf_active_longest_end() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select active_longest_end(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+-----------------------------------+",
+            "| active_longest_end(repo.datetime) |",
+            "+-----------------------------------+",
+            "| 2018-09-02                        |",
+            "+-----------------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
     }
 }

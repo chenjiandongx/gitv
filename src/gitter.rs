@@ -468,3 +468,40 @@ impl Gitter for BinaryGitter {
         Ok(s.to_vec())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_commit() {
+        let output = r#"<Mon Nov 8 23:34:49 2021 +0800> <414915edea035738cc314c8ffab7eccf4e608045> <chenjiandongx> <chenjiandongx@qq.com>
+19	0	.gitignore
+21	0	LICENSE
+1	0	README.md
+99	0	conn_darwin.go
+396	0	conn_linux.go
+71	0	conn_windows.go
+65	0	dns.go
+18	0	go.mod
+52	0	go.sum
+335	0	pcap.go
+261	0	stat.go
+250	0	ui.go"#;
+        let lines: Vec<String> = output.split('\n').map(|line| line.to_string()).collect();
+        let commit = Parser::parse_commit(&lines, vec![]).unwrap();
+
+        let author = Author {
+            name: "chenjiandongx".to_string(),
+            email: "chenjiandongx@qq.com".to_string(),
+        };
+        assert_eq!(commit.author, author);
+        assert_eq!("qq.com".to_string(), author.domain());
+        assert_eq!("Mon Nov 8 23:34:49 2021 +0800", commit.datetime);
+        assert_eq!("414915edea035738cc314c8ffab7eccf4e608045", commit.hash);
+        assert_eq!(12, commit.change_files);
+        assert_eq!(5, commit.changes.len());
+        assert_eq!(0, commit.changes.iter().map(|c| c.deletion).sum::<i64>());
+        assert_eq!(1588, commit.changes.iter().map(|c| c.insertion).sum::<i64>());
+    }
+}

@@ -356,7 +356,7 @@ fn include_functions() -> HashMap<String, Value> {
 }
 
 impl ChartRender {
-    fn parse_variable<S: Into<String>>(s: S) -> Option<(usize, String)> {
+    fn parse_variable<S: Into<String>>(&self, s: S) -> Option<(usize, String)> {
         let s = s.into();
         let l = s.find("${")?;
         let r = s.find('}')?;
@@ -372,6 +372,10 @@ impl ChartRender {
             }
         }
         None
+    }
+
+    fn cleanup_content(&self, s: String) -> String {
+        s.replace(r#""{{%"#, "").replace(r#"%}}""#, "")
     }
 
     async fn render_chart(
@@ -422,10 +426,6 @@ impl ChartRender {
         Ok(())
     }
 
-    fn cleanup_content(&self, s: String) -> String {
-        s.replace(r#""{{%"#, "").replace(r#"%}}""#, "")
-    }
-
     fn hanlde_options_section(&mut self, mappings: &mut Mapping) {
         for (key, val) in mappings {
             let key = key.as_str().unwrap_or_default();
@@ -453,7 +453,7 @@ impl ChartRender {
         for (key, val) in mappings {
             let key = key.as_str().unwrap_or_default();
             if key == KEY_FORMATTER {
-                let (_, var) = Self::parse_variable(val.as_str().unwrap_or_default())?;
+                let (_, var) = self.parse_variable(val.as_str().unwrap_or_default())?;
                 let function = FUNCTIONS.get(&var);
                 if let Some(f) = function {
                     *val = f.clone();
@@ -476,7 +476,7 @@ impl ChartRender {
     }
 
     fn handle_labels_field(&mut self, val: &mut Value, cms: &[ColumnMap]) -> Option<()> {
-        let (index, variable) = Self::parse_variable(val.as_str().unwrap_or_default())?;
+        let (index, variable) = self.parse_variable(val.as_str().unwrap_or_default())?;
         if index < cms.len() {
             if let Some(v) = cms[index].get(&variable) {
                 *val = v;
@@ -497,7 +497,7 @@ impl ChartRender {
                 let dk = dk.as_str().unwrap_or_default();
                 if dk == KET_DATA {
                     let pattern = dv.as_str().unwrap_or_default();
-                    let col = Self::parse_variable(pattern.to_string());
+                    let col = self.parse_variable(pattern.to_string());
                     if col.is_none() {
                         continue;
                     }
@@ -520,7 +520,7 @@ impl ChartRender {
     }
 
     fn handle_colors_field(&mut self, val: &mut Value) -> Option<&[Value]> {
-        let (_, var) = Self::parse_variable(val.as_str().unwrap_or_default())?;
+        let (_, var) = self.parse_variable(val.as_str().unwrap_or_default())?;
         if var == VALUE_RANDOM {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
@@ -537,18 +537,29 @@ mod tests {
     use super::*;
     #[test]
     fn test_parse_variable() {
-        let (index, var) = ChartRender::parse_variable("${0:foo}").unwrap();
+        let render = ChartRender::new(ExecutionContext::new(), config::RenderAction::default());
+        let (index, var) = render.parse_variable("${0:foo}").unwrap();
         assert_eq!((index, var), (0, "foo".to_string()));
 
-        let (index, var) = ChartRender::parse_variable("${0:foo:bar}").unwrap();
+        let (index, var) = render.parse_variable("${0:foo:bar}").unwrap();
         assert_eq!((index, var), (0, "foo:bar".to_string()));
 
-        let (index, var) = ChartRender::parse_variable("${foo}").unwrap();
+        let (index, var) = render.parse_variable("${foo}").unwrap();
         assert_eq!((index, var), (0, "foo".to_string()));
 
-        assert_eq!(ChartRender::parse_variable("${}"), None);
-        assert_eq!(ChartRender::parse_variable("${"), None);
-        assert_eq!(ChartRender::parse_variable("{}"), None);
-        assert_eq!(ChartRender::parse_variable("}${"), None);
+        assert_eq!(render.parse_variable("${}"), None);
+        assert_eq!(render.parse_variable("${"), None);
+        assert_eq!(render.parse_variable("{}"), None);
+        assert_eq!(render.parse_variable("}${"), None);
+    }
+
+    #[test]
+    fn test_cleanup_content() {
+        let render = ChartRender::new(ExecutionContext::new(), config::RenderAction::default());
+        let s = r#""{{%function() {alert('hello')}%}}""#;
+        assert_eq!(
+            render.cleanup_content(s.to_string()),
+            "function() {alert('hello')}"
+        )
     }
 }

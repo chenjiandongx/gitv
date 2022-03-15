@@ -16,36 +16,52 @@ use tracing::{error, info};
 /// 文件变更记录
 #[derive(Debug, Clone, Default)]
 pub struct FileExtChange {
+    /// 文件扩展名
     pub ext: String,
+    /// 文件改动增加行数
     pub insertion: i64,
+    /// 文件改动删除函数
     pub deletion: i64,
 }
 
 /// 提交记录
 #[derive(Debug, Clone, Default)]
 pub struct Commit {
+    /// 仓库名称
     pub repo: String,
+    /// Commit hash
     pub hash: String,
+    /// 提交作者
     pub author: Author,
+    /// 提交日期
     pub datetime: String,
-    pub change_files: i64, // 有多少文件变动
+    /// 变动文件数
+    pub change_files: i64,
+    /// 文件变更记录
     pub changes: Vec<FileExtChange>,
 }
 
 /// 文件统计
 #[derive(Debug, Clone, Default)]
 pub struct FileExtStat {
+    /// 文件扩展名
     pub ext: String,
+    /// 文件体积大小
     pub size: i64,
+    /// 文件数量
     pub files: i64,
 }
 
 /// Tags 统计数据
 #[derive(Debug, Clone, Default)]
 pub struct TagStats {
+    /// Tag hash
     pub hash: String,
+    /// 版本号
     pub tag: String,
+    /// 提交时间
     pub datetime: String,
+    /// 文件统计
     pub stats: Vec<FileExtStat>,
 }
 
@@ -160,18 +176,10 @@ impl Parser {
         for i in 0..caps.len() {
             let cap = caps.get(i).unwrap().as_str().to_string();
             match i {
-                1 => {
-                    commit.datetime = cap;
-                }
-                2 => {
-                    commit.hash = cap;
-                }
-                3 => {
-                    commit.author.name = cap;
-                }
-                4 => {
-                    commit.author.email = cap;
-                }
+                1 => commit.datetime = cap,
+                2 => commit.hash = cap,
+                3 => commit.author.name = cap,
+                4 => commit.author.email = cap,
                 _ => (),
             }
         }
@@ -201,12 +209,8 @@ impl Parser {
             for i in 0..caps.len() {
                 let cap = caps.get(i).unwrap().as_str();
                 match i {
-                    1 => {
-                        change.insertion = cap.parse::<i64>().unwrap_or(0);
-                    }
-                    2 => {
-                        change.deletion = cap.parse::<i64>().unwrap_or(0);
-                    }
+                    1 => change.insertion = cap.parse::<i64>().unwrap_or(0),
+                    2 => change.deletion = cap.parse::<i64>().unwrap_or(0),
                     3 => {
                         let p = Path::new(cap);
                         if p.extension().is_some() {
@@ -269,18 +273,19 @@ impl Parser {
             s.files += 1;
         }
 
-        let mut fes = vec![];
+        let mut data = vec![];
         for (k, v) in stats {
-            fes.push(FileExtStat {
+            data.push(FileExtStat {
                 ext: k,
                 size: v.size,
                 files: v.files,
             })
         }
-        Ok(fes)
+        Ok(data)
     }
 }
 
+/// Gitter 的 Binary 实现
 #[derive(Copy, Clone)]
 pub struct BinaryGitter;
 
@@ -446,17 +451,17 @@ impl Gitter for BinaryGitter {
                     Ok(log) => log,
                 };
 
-                let mut tag_stat = TagStats {
+                let mut tag_stats = TagStats {
                     stats: file_ext_stats,
                     ..Default::default()
                 };
                 if let Ok(commit) = Parser::parse_commit(&log[..], author_mappings) {
-                    tag_stat.tag = tag.to_string();
-                    tag_stat.hash = hash.to_string();
-                    tag_stat.datetime = commit.datetime;
+                    tag_stats.tag = tag.to_string();
+                    tag_stats.hash = hash.to_string();
+                    tag_stats.datetime = commit.datetime;
                 }
                 let mut data = lock.lock().await;
-                data.push(tag_stat);
+                data.push(tag_stats);
             });
             handles.push(handle)
         }
@@ -501,7 +506,22 @@ mod tests {
         assert_eq!("414915edea035738cc314c8ffab7eccf4e608045", commit.hash);
         assert_eq!(12, commit.change_files);
         assert_eq!(5, commit.changes.len());
-        assert_eq!(0, commit.changes.iter().map(|c| c.deletion).sum::<i64>());
-        assert_eq!(1588, commit.changes.iter().map(|c| c.insertion).sum::<i64>());
+
+        let changes = commit.changes;
+        assert_eq!(0, changes.iter().map(|c| c.deletion).sum::<i64>());
+        assert_eq!(1588, changes.iter().map(|c| c.insertion).sum::<i64>());
+    }
+
+    #[test]
+    fn test_parse_file_ext_stats() {
+        let output = r#"100644 blob fc15aee1cb60737ea15ce83b88d0fac349f9d0ff   12827	ui.go"#;
+        let fes = Parser::parse_file_ext_stats(&vec![output.to_string()]);
+        let fes = fes.unwrap();
+        assert_eq!(1, fes.len());
+
+        let first = fes.first().unwrap();
+        assert_eq!("go", first.ext);
+        assert_eq!(1, first.files);
+        assert_eq!(12827, first.size);
     }
 }

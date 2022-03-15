@@ -32,12 +32,12 @@ impl ColumnMap {
         }
     }
 
-    fn get(&self, k: &str) -> Option<Value> {
+    fn get(&self, k: &str) -> Option<Vec<Value>> {
         let mut values = vec![];
         for v in self.store.get(k)? {
             values.push(v.clone())
         }
-        Some(Value::Sequence(values))
+        Some(values)
     }
 }
 
@@ -454,8 +454,7 @@ impl ChartRender {
             let key = key.as_str().unwrap_or_default();
             if key == KEY_FORMATTER {
                 let var = self.parse_variable(val.as_str().unwrap_or_default())?;
-                let function = FUNCTIONS.get(&var.1);
-                if let Some(f) = function {
+                if let Some(f) = FUNCTIONS.get(&var.1) {
                     *val = f.clone();
                 }
             }
@@ -475,14 +474,28 @@ impl ChartRender {
         }
     }
 
-    fn handle_labels_field(&mut self, val: &mut Value, cms: &[ColumnMap]) -> Option<()> {
-        let (index, variable) = self.parse_variable(val.as_str().unwrap_or_default())?;
-        if index < cms.len() {
-            if let Some(v) = cms[index].get(&variable) {
-                *val = v;
+    fn handle_labels_field(&mut self, val: &mut Value, cms: &[ColumnMap]) {
+        if !val.is_sequence() {
+            return;
+        }
+
+        let mut items = vec![];
+        for item in val.as_sequence().unwrap() {
+            let var = self.parse_variable(item.as_str().unwrap_or_default());
+            match var {
+                Some(var) => {
+                    if var.0 < cms.len() {
+                        if let Some(v) = cms[var.0].get(&var.1) {
+                            items.extend(v);
+                        }
+                    }
+                }
+                None => {
+                    items.push(item.clone());
+                }
             }
         }
-        Some(())
+        *val = Value::Sequence(items);
     }
 
     fn handle_datasets_field(&mut self, val: &mut Value, cms: &[ColumnMap]) -> Option<()> {
@@ -496,19 +509,29 @@ impl ChartRender {
             for (dk, dv) in dataset.unwrap() {
                 let dk = dk.as_str().unwrap_or_default();
                 if dk == KET_DATA {
-                    let pattern = dv.as_str().unwrap_or_default();
-                    let col = self.parse_variable(pattern.to_string());
-                    if col.is_none() {
+                    if !dv.is_sequence() {
                         continue;
-                    }
+                    };
 
-                    let (index, variable) = col.unwrap();
-                    if index < cms.len() {
-                        if let Some(v) = cms[index].get(&variable) {
-                            *dv = v.clone();
+                    let mut items = vec![];
+                    for item in dv.as_sequence().unwrap() {
+                        let var = self.parse_variable(item.as_str().unwrap_or_default());
+                        match var {
+                            Some(var) => {
+                                if var.0 < cms.len() {
+                                    if let Some(v) = cms[var.0].get(&var.1) {
+                                        items.extend(v);
+                                    }
+                                }
+                            }
+                            None => {
+                                items.push(item.clone());
+                            }
                         }
                     }
+                    *dv = Value::Sequence(items);
                 }
+
                 if dk == KEY_COLORS {
                     if let Some(v) = self.handle_colors_field(dv) {
                         *dv = Value::Sequence(v.to_vec());

@@ -27,7 +27,7 @@ pub struct Repository {
     pub path: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Hash)]
 pub struct Author {
     pub name: String,
     pub email: String,

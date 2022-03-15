@@ -60,7 +60,7 @@ async fn persist_records<T: 'static + Gitter + Clone>(
         let gitter = gitter.clone();
         let tx = tx.clone();
         let mutex = mutex.clone();
-
+        
         let handle = tokio::spawn(async move {
             let now = time::Instant::now();
             let branch = repo.branch.clone();

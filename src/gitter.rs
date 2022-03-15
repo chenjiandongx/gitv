@@ -2,9 +2,10 @@ use crate::{config::AuthorMapping, Author, Repository};
 use anyhow::{anyhow, Result};
 use async_process::Command;
 use async_trait::async_trait;
+use chrono::{DateTime, TimeZone, Utc};
 use lazy_static::lazy_static;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::Path,
     process::exit,
@@ -14,7 +15,7 @@ use std::{
 use tracing::{error, info};
 
 /// 文件变更记录
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
 pub struct FileExtChange {
     /// 文件扩展名
     pub ext: String,
@@ -25,7 +26,7 @@ pub struct FileExtChange {
 }
 
 /// 提交记录
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
 pub struct Commit {
     /// 仓库名称
     pub repo: String,
@@ -151,6 +152,10 @@ impl GitExecutable {
 
     async fn git_ls_tree(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
         Self::git(repo, "ls-tree", args, '\u{0}').await
+    }
+
+    async fn git_rev_list(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        Self::git(repo, "rev-list", args, '\n').await
     }
 
     async fn git_checkout(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
@@ -289,6 +294,73 @@ impl Parser {
 #[derive(Copy, Clone)]
 pub struct BinaryGitter;
 
+impl BinaryGitter {
+    async fn range(&self, repo: &Repository) -> Result<Vec<(String, String)>> {
+        let lines = GitExecutable::git_rev_list(repo, &["--max-parents=0", "HEAD"]).await?;
+        if lines.is_empty() {
+            return Err(anyhow!("empty git-rev-list output"));
+        }
+        let lines = GitExecutable::git_log(
+            repo,
+            &[
+                "--date=rfc",
+                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                &lines[0],
+            ],
+        )
+        .await?;
+        if lines.is_empty() {
+            return Err(anyhow!("get first commit error"));
+        }
+
+        let mut first_commit = Commit::default();
+        Parser::parse_commit_info(&mut first_commit, &lines[0], vec![])?;
+
+        let lines = GitExecutable::git_log(
+            repo,
+            &[
+                "--date=rfc",
+                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                "HEAD",
+            ],
+        )
+        .await?;
+        if lines.is_empty() {
+            return Err(anyhow!("get last commit error"));
+        }
+        let mut last_commit = Commit::default();
+        Parser::parse_commit_info(&mut last_commit, &lines[0], vec![])?;
+
+        // TODO: 异常处理
+        let mut first_ts = DateTime::parse_from_rfc2822(&first_commit.datetime)
+            .unwrap()
+            .timestamp();
+        let last_ts = DateTime::parse_from_rfc2822(&last_commit.datetime)
+            .unwrap()
+            .timestamp();
+
+        let duration: i64 = 3600 * 24 * 180;
+        let format = "%Y-%m-%d";
+
+        let mut data: Vec<(String, String)> = vec![];
+        while first_ts + duration <= last_ts {
+            data.push((
+                Utc.timestamp(first_ts, 0).format(format).to_string(),
+                Utc.timestamp(first_ts + duration, 0)
+                    .format(format)
+                    .to_string(),
+            ));
+            first_ts += duration;
+        }
+        data.push((
+            Utc.timestamp(first_ts, 0).format(format).to_string(),
+            Utc.timestamp(last_ts, 0).format(format).to_string(),
+        ));
+
+        Ok(data)
+    }
+}
+
 #[async_trait]
 impl Gitter for BinaryGitter {
     async fn clone_or_pull(&self, repos: Vec<Repository>) -> Result<()> {
@@ -363,36 +435,57 @@ impl Gitter for BinaryGitter {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<Vec<Commit>> {
-        let lines = GitExecutable::git_log(
-            repo,
-            &[
-                "--no-merges",
-                "--date=rfc",
-                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                "--numstat",
-                "HEAD",
-            ],
-        )
-        .await?;
+        let mutex = Arc::new(Mutex::new(HashSet::new()));
+        let mut handles = vec![];
+        for (since, before) in self.range(repo).await? {
+            let mutex = mutex.clone();
+            let repo = repo.clone();
+            let author_mappings = author_mappings.clone();
+            let handle = tokio::spawn(async move {
+                let lines = GitExecutable::git_log(
+                    &repo,
+                    &[
+                        "--no-merges",
+                        "--date=rfc",
+                        &format!("--since={}", since),
+                        &format!("--before={}", before),
+                        "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                        "--numstat",
+                        "HEAD",
+                    ],
+                )
+                .await
+                .unwrap();
 
-        let mut indexes = vec![];
-        for (idx, line) in lines.iter().enumerate() {
-            if line.starts_with('<') {
-                indexes.push(idx);
-            }
+                let mut indexes = vec![];
+                for (idx, line) in lines.iter().enumerate() {
+                    if line.starts_with('<') {
+                        indexes.push(idx);
+                    }
+                }
+                indexes.push(lines.len());
+
+                let mut lock = mutex.lock().unwrap();
+                for i in 1..indexes.len() {
+                    let (l, r) = (indexes[i - 1], indexes[i]);
+                    if let Ok(mut commit) =
+                        Parser::parse_commit(&lines[l..r], author_mappings.clone())
+                    {
+                        commit.repo = repo.name.to_string();
+                        lock.insert(commit);
+                    }
+                }
+            });
+            handles.push(handle);
         }
-        indexes.push(lines.len());
 
-        let mut commits = vec![];
-        for i in 1..indexes.len() {
-            let (l, r) = (indexes[i - 1], indexes[i]);
-            if let Ok(mut commit) = Parser::parse_commit(&lines[l..r], author_mappings.clone()) {
-                commit.repo = repo.name.to_string();
-                commits.push(commit);
-            }
+        for handle in handles {
+            handle.await?
         }
 
-        Ok(commits)
+        let lock = mutex.lock().unwrap();
+        let data: Vec<_> = lock.iter().map(|x| x.clone()).collect();
+        Ok(data)
     }
 
     async fn tags(

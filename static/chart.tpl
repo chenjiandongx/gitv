@@ -10,9 +10,7 @@
 </head>
 
 <body>
-    <div>
-        <canvas id="{{ chart_id }}" width="{{ width }}" height="{{ height }}"></canvas>
-    </div>
+    <div><canvas id="{{ chart_id }}" width="{{ width }}" height="{{ height }}"></canvas></div>
     <script>
         {%- for reg in register %}
         {{ reg | safe }}

@@ -6,7 +6,7 @@ use datafusion::{
         array::ArrayRef,
         datatypes::{DataType, Field},
     },
-    error::Result,
+    error::{DataFusionError, Result},
     logical_plan::create_udaf,
     physical_plan::{
         functions::{make_scalar_function, Volatility},
@@ -43,6 +43,8 @@ lazy_static! {
     ];
 }
 
+const DATETIME_MISMATCHED: &str = "Mismatched: except rfc2882 datetime string";
+
 /// 计算给定时间的年份
 ///
 /// # Example
@@ -52,11 +54,15 @@ lazy_static! {
 /// ```
 fn udf_year() -> ScalarUDF {
     let year = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        }
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().year() as u64))
             .collect::<array::UInt64Array>();
@@ -83,11 +89,15 @@ fn udf_year() -> ScalarUDF {
 /// ```
 fn udf_month() -> ScalarUDF {
     let month = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        }
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().month() as u64))
             .collect::<array::UInt64Array>();
@@ -114,11 +124,15 @@ fn udf_month() -> ScalarUDF {
 /// ```
 fn udf_weekday() -> ScalarUDF {
     let weekday = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        };
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| {
                 Some(
@@ -152,11 +166,15 @@ fn udf_weekday() -> ScalarUDF {
 /// ```
 fn udf_week() -> ScalarUDF {
     let week = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        };
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| {
                 Some(
@@ -190,11 +208,15 @@ fn udf_week() -> ScalarUDF {
 /// ```
 fn udf_hour() -> ScalarUDF {
     let hour = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        };
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().hour() as u64))
             .collect::<array::UInt64Array>();
@@ -224,11 +246,15 @@ fn udf_hour() -> ScalarUDF {
 /// `period`| `Midnight` | `Morning` | `Afternoon` | `Evening`
 fn udf_period() -> ScalarUDF {
     let period = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        };
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| {
                 let dt = DateTime::parse_from_rfc2822(x.unwrap()).unwrap().hour();
@@ -265,11 +291,15 @@ fn udf_period() -> ScalarUDF {
 /// ```
 fn udf_timestamp() -> ScalarUDF {
     let timestamp = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        };
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| {
                 Some(
@@ -302,11 +332,15 @@ fn udf_timestamp() -> ScalarUDF {
 /// ```
 fn udf_duration() -> ScalarUDF {
     let duration = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::UInt64Array>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::UInt64Array>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        };
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| {
                 let t = Utc::now().timestamp() - x.unwrap() as i64;
@@ -336,11 +370,15 @@ fn udf_duration() -> ScalarUDF {
 /// ```
 fn udf_timezone() -> ScalarUDF {
     let timezone = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        }
+
         let array = base
+            .unwrap()
             .iter()
             .map(|x| {
                 Some(
@@ -374,16 +412,23 @@ fn udf_timezone() -> ScalarUDF {
 /// ```
 fn udf_time_format() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
-        let base = &args[0]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
-        let format = &args[1]
-            .as_any()
-            .downcast_ref::<array::StringArray>()
-            .unwrap();
-        let format = format.value(0);
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                DATETIME_MISMATCHED,
+            )));
+        };
+
+        let format = &args[1].as_any().downcast_ref::<array::StringArray>();
+        if format.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                "Mismatched: except time format",
+            )));
+        }
+
+        let format = format.unwrap().value(0);
         let array = base
+            .unwrap()
             .iter()
             .map(|x| {
                 Some(
@@ -546,9 +591,10 @@ impl TimeInputAccumulator {
             let v = states
                 .iter()
                 .map(|array| ScalarValue::try_from_array(array, index))
-                .collect::<Result<Vec<_>>>()
-                .unwrap();
-            data.extend(v);
+                .collect::<Result<Vec<_>>>();
+            if v.is_ok() {
+                data.extend(v.unwrap());
+            }
         });
 
         self.merge(&data)

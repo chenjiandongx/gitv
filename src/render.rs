@@ -291,7 +291,7 @@ impl ResultRender for ChartRender {
             dest.set_extension("html");
             self.render_chart(chart_config, &cms, &dest).await?;
             info!(
-                "[{}/{}] render file {} => elapsed {:#?}",
+                "[{}/{}] render file '{}' => elapsed {:#?}",
                 index + 1,
                 total,
                 dest.to_str().unwrap_or_default(),
@@ -317,7 +317,6 @@ static KEY_COLORS: &str = "backgroundColor";
 static KEY_PLUGINS: &str = "plugins";
 static KEY_DATALABELS: &str = "datalabels";
 static KEY_FORMATTER: &str = "formatter";
-
 static VALUE_RANDOM: &str = "random";
 
 static TEMPLATE_CHART: &str = include_str!("../static/chart.tpl");
@@ -391,7 +390,7 @@ impl ChartRender {
         let mut data_section = chart_config.data.clone();
         let mappings = data_section.as_mapping_mut();
         if mappings.is_none() {
-            return Err(anyhow!("data section should be mappings type"));
+            return Err(anyhow!("Mismatched: data section should be mappings type"));
         }
         self.hanlde_data_section(mappings.unwrap(), cms);
 
@@ -548,7 +547,7 @@ impl ChartRender {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
             let k = COLORS.keys().nth(n % COLORS.len())?;
-            info!("random colors select '{}'", k);
+            info!("[render]: random colors select '{}'", k);
             return Some(COLORS.get(k)?);
         }
         Some(COLORS.get(&var.1)?)
@@ -583,6 +582,9 @@ mod tests {
         assert_eq!(
             render.cleanup_content(s.to_string()),
             "function() {alert('hello')}"
-        )
+        );
+
+        let s = r#""{{%}}""#;
+        assert_eq!(render.cleanup_content(s.to_string()), r#"}}""#)
     }
 }

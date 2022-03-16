@@ -126,9 +126,11 @@ impl GitExecutable {
         }
 
         let mut c = Command::new("git");
-        c.args(&["clone", repo.remote.as_str(), repo.path.as_str()])
-            .output()
-            .await?;
+        if repo.remote.is_some() {
+            c.args(&["clone", repo.remote.as_ref().unwrap(), repo.path.as_str()])
+                .output()
+                .await?;
+        }
         Ok(())
     }
 
@@ -295,10 +297,10 @@ impl Parser {
 pub struct BinaryGitter;
 
 impl BinaryGitter {
-    async fn range(&self, repo: &Repository) -> Result<Vec<(String, String)>> {
+    async fn range_commits(&self, repo: &Repository) -> Result<Vec<(String, String)>> {
         let lines = GitExecutable::git_rev_list(repo, &["--max-parents=0", "HEAD"]).await?;
         if lines.is_empty() {
-            return Err(anyhow!("empty git-rev-list output"));
+            return Err(anyhow!("Empty git-rev-list output"));
         }
         let lines = GitExecutable::git_log(
             repo,
@@ -310,7 +312,7 @@ impl BinaryGitter {
         )
         .await?;
         if lines.is_empty() {
-            return Err(anyhow!("get first commit error"));
+            return Err(anyhow!("Failed to get first commit detailed"));
         }
 
         let mut first_commit = Commit::default();
@@ -325,39 +327,39 @@ impl BinaryGitter {
             ],
         )
         .await?;
+
         if lines.is_empty() {
-            return Err(anyhow!("get last commit error"));
+            return Err(anyhow!("Failed to get last commit detailed"));
         }
         let mut last_commit = Commit::default();
         Parser::parse_commit_info(&mut last_commit, &lines[0], vec![])?;
 
-        // TODO: 异常处理
-        let mut first_ts = DateTime::parse_from_rfc2822(&first_commit.datetime)
-            .unwrap()
-            .timestamp();
-        let last_ts = DateTime::parse_from_rfc2822(&last_commit.datetime)
-            .unwrap()
-            .timestamp();
+        let first_ts = DateTime::parse_from_rfc2822(&first_commit.datetime)?.timestamp();
+        let last_ts = DateTime::parse_from_rfc2822(&last_commit.datetime)?.timestamp();
 
-        let duration: i64 = 3600 * 24 * 180;
+        const DURATION: i64 = 3600 * 24 * 120; // 120days
+        let data = self.calc_range(DURATION, first_ts, last_ts);
+        Ok(data)
+    }
+
+    fn calc_range(&self, duration: i64, mut start: i64, end: i64) -> Vec<(String, String)> {
         let format = "%Y-%m-%d";
-
         let mut data: Vec<(String, String)> = vec![];
-        while first_ts + duration <= last_ts {
+        while start + duration <= end {
             data.push((
-                Utc.timestamp(first_ts, 0).format(format).to_string(),
-                Utc.timestamp(first_ts + duration, 0)
+                Utc.timestamp(start, 0).format(format).to_string(),
+                Utc.timestamp(start + duration, 0)
                     .format(format)
                     .to_string(),
             ));
-            first_ts += duration;
+            start += duration;
         }
         data.push((
-            Utc.timestamp(first_ts, 0).format(format).to_string(),
-            Utc.timestamp(last_ts, 0).format(format).to_string(),
+            Utc.timestamp(start, 0).format(format).to_string(),
+            Utc.timestamp(end, 0).format(format).to_string(),
         ));
 
-        Ok(data)
+        data
     }
 }
 
@@ -376,7 +378,7 @@ impl Gitter for BinaryGitter {
                 let now = time::Instant::now();
                 if Path::new(&repo.path).exists() {
                     if let Err(e) = GitExecutable::git_pull(&repo).await {
-                        error!("failed to execute git pull command, err: {}", e);
+                        error!("Failed to execute git pull command, error: {}", e);
                         exit(1)
                     };
 
@@ -384,15 +386,15 @@ impl Gitter for BinaryGitter {
                     *lock += 1;
                     let n = *lock;
                     info!(
-                        "[{}/{}] git pull: elapsed {:#?} => {}",
+                        "[{}/{}] git pull '{}' => elapsed {:#?}",
                         n,
                         total,
+                        &repo.name,
                         now.elapsed(),
-                        &repo.remote,
                     )
                 } else {
                     if let Err(e) = GitExecutable::git_clone(&repo).await {
-                        error!("failed to execute git clone command, err: {}", e);
+                        error!("Failed to execute git clone command, error: {}", e);
                         exit(1)
                     };
 
@@ -400,11 +402,11 @@ impl Gitter for BinaryGitter {
                     *lock += 1;
                     let n = *lock;
                     info!(
-                        "[{}/{}] git clone: elapsed {:#?} => {}",
+                        "[{}/{}] git clone '{}' => elapsed {:#?}",
                         n,
                         total,
+                        &repo.name,
                         now.elapsed(),
-                        &repo.remote,
                     )
                 }
             });
@@ -427,9 +429,6 @@ impl Gitter for BinaryGitter {
         Ok(())
     }
 
-    // TODO(optimize): 按时间切割 并发执行
-    // https://stackoverflow.com/questions/11856983/why-git-authordate-is-different-from-commitdate
-    // https://stackoverflow.com/questions/37311494/how-to-get-git-to-show-commits-in-a-specified-date-range-for-author-date
     async fn commits(
         &self,
         repo: &Repository,
@@ -437,7 +436,7 @@ impl Gitter for BinaryGitter {
     ) -> Result<Vec<Commit>> {
         let mutex = Arc::new(Mutex::new(HashSet::new()));
         let mut handles = vec![];
-        for (since, before) in self.range(repo).await? {
+        for (since, before) in self.range_commits(repo).await? {
             let mutex = mutex.clone();
             let repo = repo.clone();
             let author_mappings = author_mappings.clone();
@@ -454,9 +453,14 @@ impl Gitter for BinaryGitter {
                         "HEAD",
                     ],
                 )
-                .await
-                .unwrap();
+                .await;
 
+                if let Err(e) = lines {
+                    error!("Failed to execute git log command, error: {}", e);
+                    exit(1)
+                };
+
+                let lines = lines.unwrap();
                 let mut indexes = vec![];
                 for (idx, line) in lines.iter().enumerate() {
                     if line.starts_with('<') {
@@ -511,7 +515,7 @@ impl Gitter for BinaryGitter {
                 let lines = GitExecutable::git_ls_tree(&repo, &["-r", "-l", "-z", hash]).await;
                 let lines = match lines {
                     Err(e) => {
-                        error!("failed to execute git ls-tree command, err: {}", e);
+                        error!("Failed to execute git ls-tree command, error: {}", e);
                         exit(1)
                     }
                     Ok(lines) => lines,
@@ -519,7 +523,7 @@ impl Gitter for BinaryGitter {
 
                 let file_ext_stats = match Parser::parse_file_ext_stats(&lines) {
                     Err(e) => {
-                        error!("failed to parse file ext stats, err: {}", e);
+                        error!("Failed to parse file ext stats, error: {}", e);
                         exit(1)
                     }
                     Ok(lines) => lines,
@@ -538,7 +542,7 @@ impl Gitter for BinaryGitter {
                 .await;
                 let log = match log {
                     Err(e) => {
-                        error!("failed to execute git log command, err: {}", e);
+                        error!("Failed to execute git log command, error: {}", e);
                         exit(1)
                     }
                     Ok(log) => log,
@@ -616,5 +620,22 @@ mod tests {
         assert_eq!("go", first.ext);
         assert_eq!(1, first.files);
         assert_eq!(12827, first.size);
+    }
+
+    #[test]
+    fn test_calc_range() {
+        let duration: i64 = 3600 * 24;
+        let start: i64 = 1647432000;
+        let end: i64 = 1647432000 + (duration * 3) + 720;
+
+        let gitter = BinaryGitter;
+        let range = gitter.calc_range(duration, start, end);
+        let excepted = vec![
+            (String::from("2022-03-16"), String::from("2022-03-17")),
+            (String::from("2022-03-17"), String::from("2022-03-18")),
+            (String::from("2022-03-18"), String::from("2022-03-19")),
+            (String::from("2022-03-19"), String::from("2022-03-19")),
+        ];
+        assert_eq!(excepted, range);
     }
 }

@@ -219,6 +219,9 @@ fn udf_hour() -> ScalarUDF {
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
 /// output: "Afternoon"
 /// ```
+/// `hour`  |  `[0, 8)`  | `[8, 12)` |  `[12, 18)` | `[18, 24)`
+/// ------- | ---------- | --------- | ----------- | ---------
+/// `period`| `Midnight` | `Morning` | `Afternoon` | `Evening`
 fn udf_period() -> ScalarUDF {
     let period = |args: &[array::ArrayRef]| {
         let base = &args[0]
@@ -272,10 +275,10 @@ fn udf_timestamp() -> ScalarUDF {
                 Some(
                     DateTime::parse_from_rfc2822(x.unwrap())
                         .unwrap()
-                        .timestamp() as u64,
+                        .timestamp(),
                 )
             })
-            .collect::<array::UInt64Array>();
+            .collect::<array::Int64Array>();
 
         Ok(Arc::new(array) as array::ArrayRef)
     };
@@ -284,7 +287,7 @@ fn udf_timestamp() -> ScalarUDF {
     create_udf(
         "timestamp",
         vec![DataType::Utf8],
-        Arc::new(DataType::UInt64),
+        Arc::new(DataType::Int64),
         Volatility::Immutable,
         timestamp,
     )

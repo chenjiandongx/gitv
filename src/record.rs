@@ -65,7 +65,7 @@ async fn persist_records<T: 'static + Gitter + Clone>(
             let now = time::Instant::now();
             let branch = repo.branch.clone();
             if let Err(e) = gitter.checkout(&repo).await {
-                error!("failed to execute git checkout command, err: {}", e);
+                error!("Failed to execute git checkout command, error: {}", e);
                 exit(1);
             }
 
@@ -122,11 +122,11 @@ async fn persist_records<T: 'static + Gitter + Clone>(
             *lock += 1;
             let n = lock;
             info!(
-                "[{}/{}] git analyze: elapsed {:#?} => {}",
+                "[{}/{}] git analyze '{}' => elapsed {:#?}",
                 n,
                 total,
+                repo.name,
                 now.elapsed(),
-                repo.remote
             )
         });
         handles.push(handle)
@@ -139,20 +139,20 @@ async fn persist_records<T: 'static + Gitter + Clone>(
         while let Some(record) = rx.recv().await {
             n += 1;
             if let Err(e) = wtr.serialize(record) {
-                error!("failed to serialize record, err: {}", e);
+                error!("Failed to serialize record, error: {}", e);
                 exit(1)
             };
 
             if n >= FLUSH_SIZE {
                 if let Err(e) = wtr.flush() {
-                    error!("failed to flush cached to disk, err: {}", e);
+                    error!("Failed to flush cached to disk, error: {}", e);
                     exit(1)
                 }
             }
         }
 
         if let Err(e) = wtr.flush() {
-            error!("failed to flush cached to disk, err: {}", e);
+            error!("Failed to flush cached to disk, error: {}", e);
             exit(1)
         }
     });
@@ -201,7 +201,7 @@ impl<T: 'static + Gitter + Clone> RecordSerializer for CsvSerializer<T> {
                 )
                 .await;
                 if let Err(e) = r {
-                    error!("failed to persist records, err: {}", e);
+                    error!("Failed to persist records, error: {}", e);
                     exit(1)
                 }
             });

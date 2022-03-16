@@ -23,7 +23,7 @@ pub struct AuthorMapping {
 pub struct Repository {
     pub name: String,
     pub branch: Option<String>,
-    pub remote: String,
+    pub remote: Option<String>,
     pub path: String,
 }
 
@@ -37,7 +37,7 @@ impl Author {
     pub fn domain(&self) -> String {
         let email = self.email.clone();
         let fields = email.splitn(2, '@').collect::<Vec<&str>>();
-        fields.last().unwrap().to_string()
+        fields.last().unwrap_or(&"").to_string()
     }
 }
 
@@ -130,6 +130,9 @@ pub struct Dependency {
     datalabels: String,
 }
 
+static REGISTER_STACKED100: &str = "Chart.register(ChartjsPluginStacked100)";
+static REGISTER_DATALABELS: &str = "Chart.register(ChartDataLabels)";
+
 impl Dependency {
     pub fn list(&self) -> Vec<String> {
         let mut data = vec![];
@@ -147,26 +150,28 @@ impl Dependency {
         data
     }
 
-    pub fn register(&self) -> Vec<String> {
+    pub fn register(&self) -> Vec<&'static str> {
         let mut data = vec![];
         if !self.stacked100.is_empty() {
-            data.push("Chart.register(ChartjsPluginStacked100)".to_string());
+            data.push(REGISTER_STACKED100);
         }
         if !self.datalabels.is_empty() {
-            data.push("Chart.register(ChartDataLabels)".to_string());
+            data.push(REGISTER_DATALABELS);
         }
         data
     }
 }
 
+static DEPENDENCY_CHARTJS: &str = "https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js";
+static DEPENDENCY_STACKED100: &str = "https://cdn.jsdelivr.net/npm/chartjs-plugin-stacked100@1.0";
+static DEPENDENCY_DATALABELS: &str = "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0";
+
 impl Default for Dependency {
     fn default() -> Self {
         Self {
-            chartjs: String::from("https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js"),
-            stacked100: String::from("https://cdn.jsdelivr.net/npm/chartjs-plugin-stacked100@1.0"),
-            datalabels: String::from(
-                "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0",
-            ),
+            chartjs: String::from(DEPENDENCY_CHARTJS),
+            stacked100: String::from(DEPENDENCY_STACKED100),
+            datalabels: String::from(DEPENDENCY_DATALABELS),
         }
     }
 }
@@ -190,10 +195,10 @@ pub struct ChartConfig {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
-    pub create: CreateAction,
-    pub fetch: FetchAction,
-    pub shell: ShellAction,
-    pub render: RenderAction,
+    pub create: Option<CreateAction>,
+    pub fetch: Option<FetchAction>,
+    pub shell: Option<ShellAction>,
+    pub render: Option<RenderAction>,
 }
 
 pub fn load_config(c: &str) -> Result<Config> {

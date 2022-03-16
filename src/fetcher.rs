@@ -32,7 +32,7 @@ impl RepoFetcher {
                 let repos = GithubRepoFetcher::repositories(&config).await;
                 let repos = match repos {
                     Err(e) => {
-                        error!("failed to fetch github repositories, err: {}", e);
+                        error!("Fetch github repos error: {}", e);
                         exit(1)
                     }
                     Ok(repos) => repos,
@@ -42,7 +42,7 @@ impl RepoFetcher {
                 let f = match f {
                     Err(e) => {
                         error!(
-                            "failed to create file '{}', err: {}",
+                            "Failed to create file '{}', error: {}",
                             &config.destination, e
                         );
                         exit(1)
@@ -51,7 +51,7 @@ impl RepoFetcher {
                 };
 
                 if let Err(e) = serde_yaml::to_writer(f, &repos) {
-                    error!("failed to unmarshal serde object, err: {}", e);
+                    error!("Failed to unmarshal serde object, error: {}", e);
                     exit(1)
                 };
                 info!("save database file '{}'", &config.destination);
@@ -64,7 +64,7 @@ impl RepoFetcher {
         }
 
         info!(
-            "[github]: all repositories have been fetched, elapsed: {:#?}",
+            "[github]: all repos have been fetched, elapsed: {:#?}",
             now.elapsed()
         );
         Ok(())
@@ -140,7 +140,7 @@ impl GithubRepoFetcher {
                     repos.push(Repository {
                         name: name.clone(),
                         branch: Some(repo.default_branch),
-                        remote: repo.clone_url,
+                        remote: Some(repo.clone_url),
                         path: Path::new(&config.base_dir.clone())
                             .join(Path::new(&name))
                             .to_str()
@@ -150,7 +150,8 @@ impl GithubRepoFetcher {
                 }
             }
         }
-        info!("[github]: fetch total {} repositories", repos.len());
+        
+        info!("[github]: fetch total {} repos", repos.len());
         Ok(repos)
     }
 }

@@ -2,6 +2,11 @@
 name = "gitx"
 version = "0.1.0"
 edition = "2021"
+authors = ["chenjiandongx <chenjiandongx@qq.com>"]
+homepage = "https://github.com/chenjiandongx/gitx"
+repository = "https://github.com/chenjiandongx/gitx"
+license = "MIT/Apache-2.0"
+readme = "README.md"
 
 [[bin]]
 name = "gitx"

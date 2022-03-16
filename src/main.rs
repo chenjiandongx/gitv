@@ -18,9 +18,6 @@ use std::{io, process::exit};
 use tracing::*;
 use tracing_subscriber::fmt::{format::Writer, time::FormatTime};
 
-// TODO(feat): 新增代码函数统计
-// TODO(optimize): 统一配置校验方式
-
 struct LocalTimer;
 
 impl FormatTime for LocalTimer {
@@ -29,7 +26,7 @@ impl FormatTime for LocalTimer {
     }
 }
 
-fn setup_logger() {
+fn init_logger() {
     let format = tracing_subscriber::fmt::format()
         .with_level(false)
         .with_timer(LocalTimer)
@@ -68,66 +65,65 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    setup_logger();
+    init_logger();
 
     let cli: Cli = Cli::parse();
     let c: Config = match config::load_config(&cli.path.unwrap_or("gitx.yaml".to_string())) {
         Err(e) => {
-            error!("load config error: {}", e);
+            error!("Load config error: {}", e);
             exit(1);
         }
         Ok(c) => c,
     };
 
-    if cli.fetch {
-        let repo_fetcher = RepoFetcher::new(c.fetch);
-        if let Err(e) = repo_fetcher.fetch().await {
-            error!("fetch repos error: {}", e);
-            exit(1);
-        };
-        exit(0)
-    }
-
-    if cli.create {
+    if cli.create && c.create.is_some() {
         let serializer = CsvSerializer::new(BinaryGitter);
-        if let Err(e) = serializer.serialize(c.create).await {
-            error!("serialize records error: {}", e);
+        if let Err(e) = serializer.serialize(c.create.unwrap()).await {
+            error!("Create database error: {}", e);
             exit(1);
         };
         exit(0)
     }
 
-    if cli.shell {
-        let ctx = Executor::create_context(c.shell.executions).await;
+    if cli.fetch && c.fetch.is_some() {
+        let repo_fetcher = RepoFetcher::new(c.fetch.unwrap());
+        if let Err(e) = repo_fetcher.fetch().await {
+            error!("Fetch repos error: {}", e);
+            exit(1);
+        };
+        exit(0)
+    }
+
+    if cli.shell && c.shell.is_some() {
+        let ctx = Executor::create_context(c.shell.unwrap().executions).await;
         let ctx = match ctx {
             Err(e) => {
-                error!("create executor context error: {}", e);
+                error!("Create executor context error: {}", e);
                 exit(1)
             }
             Ok(ctx) => ctx,
         };
 
         if let Err(e) = shell::console_loop(ctx).await {
-            error!("shell console loop error: {}", e);
+            error!("Shell console loop error: {}", e);
             exit(1);
         };
         exit(0)
     }
 
-    if cli.render {
-        let executions = c.render.executions.clone();
-        let ctx = Executor::create_context(executions).await;
-        let ctx = match ctx {
+    if cli.render && c.render.is_some() {
+        let render_config = c.render.unwrap();
+        let executions = render_config.executions.clone();
+        let ctx = match Executor::create_context(executions).await {
             Err(e) => {
-                error!("create executor context error: {}", e);
+                error!("Create executor context error: {}", e);
                 exit(1)
             }
             Ok(ctx) => ctx,
         };
 
-        let mut render = render::create_render(ctx, c.render);
-        if let Err(e) = render.render().await {
-            error!("render output error: {}", e);
+        if let Err(e) = render::create_render(ctx, render_config).render().await {
+            error!("Render output error: {}", e);
             exit(1);
         }
         exit(0)

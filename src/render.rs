@@ -279,12 +279,12 @@ impl ResultRender for ChartRender {
             let mut cms = vec![];
             let now = time::Instant::now();
             for sql in query.statements {
-                cms.push(self.engine.select(&sql).await.unwrap())
+                cms.push(self.engine.select(&sql).await?)
             }
+
             if query.chart.is_none() {
                 continue;
             }
-
             let chart_config = query.chart.unwrap();
             let mut dest =
                 Path::new(&self.config.display.destination).join(chart_config.name.clone());

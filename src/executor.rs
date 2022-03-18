@@ -26,10 +26,11 @@ lazy_static! {
         udf_year,
         udf_month,
         udf_weekday,
-        udf_week,
+        udf_weeknum,
         udf_hour,
         udf_period,
         udf_timestamp,
+        udf_timestamp_rfc3339,
         udf_timezone,
         udf_duration,
         udf_time_format,
@@ -43,7 +44,7 @@ lazy_static! {
     ];
 }
 
-const DATETIME_MISMATCHED: &str = "Mismatched: except rfc2882 datetime string";
+const ERROR_DATEDATE_MISMATCHED: &str = "Mismatched: except rfc2882 datetime string";
 
 /// 计算给定时间的年份
 ///
@@ -57,15 +58,18 @@ fn udf_year() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         }
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().year() as u64))
-            .collect::<array::UInt64Array>();
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.year()),
+                Err(_) => None,
+            })
+            .collect::<array::Int32Array>();
 
         Ok(Arc::new(array) as array::ArrayRef)
     };
@@ -74,7 +78,7 @@ fn udf_year() -> ScalarUDF {
     create_udf(
         "year",
         vec![DataType::Utf8],
-        Arc::new(DataType::UInt64),
+        Arc::new(DataType::Int32),
         Volatility::Immutable,
         year,
     )
@@ -92,15 +96,18 @@ fn udf_month() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         }
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().month() as u64))
-            .collect::<array::UInt64Array>();
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.month()),
+                Err(_) => None,
+            })
+            .collect::<array::UInt32Array>();
 
         Ok(Arc::new(array) as array::ArrayRef)
     };
@@ -109,7 +116,7 @@ fn udf_month() -> ScalarUDF {
     create_udf(
         "month",
         vec![DataType::Utf8],
-        Arc::new(DataType::UInt64),
+        Arc::new(DataType::UInt32),
         Volatility::Immutable,
         month,
     )
@@ -127,20 +134,16 @@ fn udf_weekday() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         };
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| {
-                Some(
-                    DateTime::parse_from_rfc2822(x.unwrap())
-                        .unwrap()
-                        .weekday()
-                        .to_string(),
-                )
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.weekday().to_string()),
+                Err(_) => None,
             })
             .collect::<array::StringArray>();
 
@@ -162,27 +165,23 @@ fn udf_weekday() -> ScalarUDF {
 /// # Example
 /// ```rust
 /// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
-/// output: 1
+/// output: 0
 /// ```
-fn udf_week() -> ScalarUDF {
+fn udf_weeknum() -> ScalarUDF {
     let week = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         };
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| {
-                Some(
-                    DateTime::parse_from_rfc2822(x.unwrap())
-                        .unwrap()
-                        .weekday()
-                        .num_days_from_monday(),
-                )
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.weekday().num_days_from_monday()),
+                Err(_) => None,
             })
             .collect::<array::UInt32Array>();
 
@@ -191,7 +190,7 @@ fn udf_week() -> ScalarUDF {
 
     let week = make_scalar_function(week);
     create_udf(
-        "week",
+        "weeknum",
         vec![DataType::Utf8],
         Arc::new(DataType::UInt32),
         Volatility::Immutable,
@@ -211,15 +210,18 @@ fn udf_hour() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         };
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| Some(DateTime::parse_from_rfc2822(x.unwrap()).unwrap().hour() as u64))
-            .collect::<array::UInt64Array>();
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.hour()),
+                Err(_) => None,
+            })
+            .collect::<array::UInt32Array>();
 
         Ok(Arc::new(array) as array::ArrayRef)
     };
@@ -228,7 +230,7 @@ fn udf_hour() -> ScalarUDF {
     create_udf(
         "hour",
         vec![DataType::Utf8],
-        Arc::new(DataType::UInt64),
+        Arc::new(DataType::UInt32),
         Volatility::Immutable,
         hour,
     )
@@ -249,23 +251,25 @@ fn udf_period() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         };
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| {
-                let dt = DateTime::parse_from_rfc2822(x.unwrap()).unwrap().hour();
-                let s = match dt {
-                    0..=7 => String::from("Midnight"),
-                    8..=11 => String::from("Morning"),
-                    12..=18 => String::from("Afternoon"),
-                    19..=23 => String::from("Evening"),
-                    _ => unreachable!(),
-                };
-                Some(s)
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => {
+                    let s = match t.hour() {
+                        0..=7 => String::from("Midnight"),
+                        8..=11 => String::from("Morning"),
+                        12..=18 => String::from("Afternoon"),
+                        19..=23 => String::from("Evening"),
+                        _ => unreachable!(),
+                    };
+                    Some(s)
+                }
+                Err(_) => None,
             })
             .collect::<array::StringArray>();
 
@@ -294,19 +298,16 @@ fn udf_timestamp() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         };
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| {
-                Some(
-                    DateTime::parse_from_rfc2822(x.unwrap())
-                        .unwrap()
-                        .timestamp(),
-                )
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.timestamp()),
+                Err(_) => None,
             })
             .collect::<array::Int64Array>();
 
@@ -335,7 +336,7 @@ fn udf_duration() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::UInt64Array>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         };
 
@@ -354,7 +355,7 @@ fn udf_duration() -> ScalarUDF {
     let duration = make_scalar_function(duration);
     create_udf(
         "duration",
-        vec![DataType::UInt64],
+        vec![DataType::Int64],
         Arc::new(DataType::Utf8),
         Volatility::Immutable,
         duration,
@@ -373,20 +374,16 @@ fn udf_timezone() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         }
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| {
-                Some(
-                    DateTime::parse_from_rfc2822(x.unwrap())
-                        .unwrap()
-                        .timezone()
-                        .to_string(),
-                )
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.timezone().to_string()),
+                Err(_) => None,
             })
             .collect::<array::StringArray>();
 
@@ -403,6 +400,44 @@ fn udf_timezone() -> ScalarUDF {
     )
 }
 
+/// 计算给定 rfc339 字符串格式的时间戳
+///
+/// # Example
+/// ```rust
+/// input<arg1: rfc2822>: "2019-10-12T07:20:50.52Z"
+/// output: 1570864850 
+/// ```
+fn udf_timestamp_rfc3339() -> ScalarUDF {
+    let timestamp_rcf3339 = |args: &[array::ArrayRef]| {
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                ERROR_DATEDATE_MISMATCHED,
+            )));
+        }
+
+        let array = base
+            .unwrap()
+            .iter()
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
+                Ok(t) => Some(t.timestamp()),
+                Err(_) => None,
+            })
+            .collect::<array::Int64Array>();
+
+        Ok(Arc::new(array) as array::ArrayRef)
+    };
+
+    let timestamp_rcf3339 = make_scalar_function(timestamp_rcf3339);
+    create_udf(
+        "timestamp_rfc3339",
+        vec![DataType::Utf8],
+        Arc::new(DataType::Int64),
+        Volatility::Immutable,
+        timestamp_rcf3339,
+    )
+}
+
 /// 格式化字符串时间
 ///
 /// # Example
@@ -415,7 +450,7 @@ fn udf_time_format() -> ScalarUDF {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
-                DATETIME_MISMATCHED,
+                ERROR_DATEDATE_MISMATCHED,
             )));
         };
 
@@ -430,16 +465,11 @@ fn udf_time_format() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| {
-                Some(
-                    DateTime::parse_from_rfc2822(x.unwrap())
-                        .unwrap()
-                        .format(format)
-                        .to_string(),
-                )
+            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+                Ok(t) => Some(t.format(format).to_string()),
+                Err(_) => None,
             })
             .collect::<array::StringArray>();
-
         Ok(Arc::new(array) as array::ArrayRef)
     };
 
@@ -901,10 +931,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_udf_week() {
+    async fn test_udf_weeknum() {
         let mut ctx = get_datetime_context();
         let result: Vec<RecordBatch> = ctx
-            .sql("select week(datetime) from repo;")
+            .sql("select weeknum(datetime) from repo;")
             .await
             .unwrap()
             .collect()
@@ -912,14 +942,14 @@ mod tests {
             .unwrap();
 
         let expected = vec![
-            "+---------------------+",
-            "| week(repo.datetime) |",
-            "+---------------------+",
-            "| 0                   |",
-            "| 1                   |",
-            "| 5                   |",
-            "| 6                   |",
-            "+---------------------+",
+            "+------------------------+",
+            "| weeknum(repo.datetime) |",
+            "+------------------------+",
+            "| 0                      |",
+            "| 1                      |",
+            "| 5                      |",
+            "| 6                      |",
+            "+------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
     }
@@ -928,7 +958,7 @@ mod tests {
     async fn test_udf_hour() {
         let mut ctx = get_datetime_context();
         let result: Vec<RecordBatch> = ctx
-            .sql("select hour(datetime) as hour from repo order by hour;")
+            .sql("select hour(datetime) from repo;")
             .await
             .unwrap()
             .collect()
@@ -936,8 +966,14 @@ mod tests {
             .unwrap();
 
         let expected = vec![
-            "+------+", "| hour |", "+------+", "| 0    |", "| 9    |", "| 16   |", "| 19   |",
-            "+------+",
+            "+---------------------+",
+            "| hour(repo.datetime) |",
+            "+---------------------+",
+            "| 9                   |",
+            "| 16                  |",
+            "| 19                  |",
+            "| 0                   |",
+            "+---------------------+",
         ];
         datafusion::assert_batches_eq!(expected, &result);
     }
@@ -986,6 +1022,27 @@ mod tests {
             "| 1535790142               |",
             "| 1535886918               |",
             "+--------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_timestamp_rfc3339() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select timestamp_rfc3339('2019-10-12T07:20:50.52Z') as ts from repo limit 1;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+------------+",
+            "| ts         |",
+            "+------------+",
+            "| 1570864850 |",
+            "+------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
     }

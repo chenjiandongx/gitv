@@ -28,7 +28,12 @@ pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
                         println!("Good bye!");
                         break;
                     }
-                    s => match ctx.sql(s).await {
+                    s => {
+                        if s.is_empty() {
+                            println!("gitx(sql)> ");
+                            continue
+                        }
+                        match ctx.sql(s).await {
                         Ok(batches) => match batches.collect().await {
                             Ok(batches) => {
                                 pretty::print_batches(&batches)?;
@@ -38,7 +43,7 @@ pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
                         Err(e) => {
                             println!("Error: {}", e);
                         }
-                    },
+                    }}
                 }
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {

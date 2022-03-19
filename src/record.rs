@@ -75,51 +75,62 @@ async fn persist_records<T: 'static + Gitter + Clone>(
                 exit(1);
             }
 
-            let commits = gitter.commits(&repo, author_mappings.clone()).await;
-            if let Ok(commits) = commits {
-                for commit in commits {
-                    let domain = commit.author.domain();
-                    let common_record = Record {
-                        repo_name: repo.name.clone(),
-                        branch: branch.clone().unwrap_or_default(),
-                        datetime: datetime_rfc339(&commit.datetime),
-                        author_name: commit.author.name,
-                        author_email: commit.author.email,
-                        author_domain: domain,
-                        ..Default::default()
-                    };
+            match gitter.commits(&repo, author_mappings.clone()).await {
+                Ok(commits) => {
+                    for commit in commits {
+                        let domain = commit.author.domain();
+                        let common_record = Record {
+                            repo_name: repo.name.clone(),
+                            branch: branch.clone().unwrap_or_default(),
+                            datetime: datetime_rfc339(&commit.datetime),
+                            author_name: commit.author.name,
+                            author_email: commit.author.email,
+                            author_domain: domain,
+                            ..Default::default()
+                        };
 
-                    let mut commit_record = common_record.clone();
-                    commit_record.metric = RECORD_COMMIT.to_string();
-                    if tx.send(commit_record).await.is_err() {
-                        return;
+                        let mut commit_record = common_record.clone();
+                        commit_record.metric = RECORD_COMMIT.to_string();
+                        if tx.send(commit_record).await.is_err() {
+                            return;
+                        }
+
+                        for fc in commit.changes {
+                            let mut record = common_record.clone();
+                            record.metric = RECORD_CHANGE.to_string();
+                            record.ext = fc.ext;
+                            record.insertion = fc.insertion;
+                            record.deletion = fc.deletion;
+                            if tx.send(record).await.is_err() {
+                                return;
+                            }
+                        }
                     }
+                }
+                Err(e) => {
+                    error!("Failed to analyzer repo commits, error: {}", e);
+                    exit(1)
+                }
+            }
 
-                    for fc in commit.changes {
-                        let mut record = common_record.clone();
-                        record.metric = RECORD_CHANGE.to_string();
-                        record.ext = fc.ext;
-                        record.insertion = fc.insertion;
-                        record.deletion = fc.deletion;
+            match gitter.tags(&repo, author_mappings.clone()).await {
+                Ok(tagstats) => {
+                    for tagstat in tagstats {
+                        let record = Record {
+                            metric: RECORD_TAG.to_string(),
+                            repo_name: repo.name.clone(),
+                            datetime: datetime_rfc339(&tagstat.datetime),
+                            tag: tagstat.tag,
+                            ..Default::default()
+                        };
                         if tx.send(record).await.is_err() {
                             return;
                         }
                     }
                 }
-            }
-
-            if let Ok(tagstats) = gitter.tags(&repo, author_mappings.clone()).await {
-                for tagstat in tagstats {
-                    let record = Record {
-                        metric: RECORD_TAG.to_string(),
-                        repo_name: repo.name.clone(),
-                        datetime: datetime_rfc339(&tagstat.datetime),
-                        tag: tagstat.tag,
-                        ..Default::default()
-                    };
-                    if tx.send(record).await.is_err() {
-                        return;
-                    }
+                Err(e) => {
+                    error!("Failed to analyzer repo tags, error: {}", e);
+                    exit(1)
                 }
             }
 

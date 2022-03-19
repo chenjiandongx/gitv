@@ -32,7 +32,8 @@ lazy_static! {
         udf_timestamp,
         udf_timezone,
         udf_duration,
-        udf_time_format,
+        udf_datetime_format,
+        udf_timestamp_format,
     ];
 
     /// udaf 函数集合
@@ -406,7 +407,7 @@ fn udf_duration() -> ScalarUDF {
 /// input<arg1: rfc3339, arg2: String>: ("2021-10-12T14:20:50.52+07:00", "%Y-%m-%d %H:%M:%S")
 /// output: "2021-10-12 14:20:50"
 /// ```
-fn udf_time_format() -> ScalarUDF {
+fn udf_datetime_format() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
@@ -436,8 +437,50 @@ fn udf_time_format() -> ScalarUDF {
 
     let date = make_scalar_function(date);
     create_udf(
-        "time_format",
+        "datetime_format",
         vec![DataType::Utf8, DataType::Utf8],
+        Arc::new(DataType::Utf8),
+        Volatility::Immutable,
+        date,
+    )
+}
+
+/// 格式化字符串时间
+///
+/// # Example
+/// ```rust
+/// input<arg1: unix timestamp, arg2: String>: (1647272093, "%Y-%m-%d %H:%M:%S")
+/// output: "2021-10-12 14:20:50"
+/// ```
+fn udf_timestamp_format() -> ScalarUDF {
+    let date = |args: &[array::ArrayRef]| {
+        let base = &args[0].as_any().downcast_ref::<array::Int64Array>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                ERROR_DATEDATE_MISMATCHED,
+            )));
+        };
+
+        let format = &args[1].as_any().downcast_ref::<array::StringArray>();
+        if format.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                "Mismatched: except time format",
+            )));
+        }
+
+        let format = format.unwrap().value(0);
+        let array = base
+            .unwrap()
+            .iter()
+            .map(|x| Some(Utc.timestamp(x.unwrap(), 0).format(format).to_string()))
+            .collect::<array::StringArray>();
+        Ok(Arc::new(array) as array::ArrayRef)
+    };
+
+    let date = make_scalar_function(date);
+    create_udf(
+        "timestamp_format",
+        vec![DataType::Int64, DataType::Utf8],
         Arc::new(DataType::Utf8),
         Volatility::Immutable,
         date,
@@ -1012,10 +1055,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_udf_time_format() {
+    async fn test_udf_datetime_format() {
         let mut ctx = get_datetime_context();
         let result: Vec<RecordBatch> = ctx
-            .sql("select time_format(datetime, '%Y-%m-%d %H:%M:%S') as t from repo;")
+            .sql("select datetime_format(datetime, '%Y-%m-%d %H:%M:%S') as t from repo;")
             .await
             .unwrap()
             .collect()
@@ -1030,6 +1073,27 @@ mod tests {
             "| 2020-03-03 11:39:50 |",
             "| 2021-10-12 14:20:50 |",
             "| 2021-10-13 08:20:50 |",
+            "+---------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_timestamp_format() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select timestamp_format(1647272093, '%Y-%m-%d %H:%M:%S') as t from repo limit 1;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+---------------------+",
+            "| t                   |",
+            "+---------------------+",
+            "| 2022-03-14 15:34:53 |",
             "+---------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);

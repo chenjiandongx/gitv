@@ -339,6 +339,13 @@ impl BinaryGitter {
 
         const DURATION: i64 = 3600 * 24 * 120; // 120days
         let data = self.calc_range(DURATION, first_ts, last_ts);
+
+        if data.len() == 1 {
+            let first = &data[0];
+            if first.0 == first.1 {
+                return Ok(vec![("".to_string(), "".to_string())]);
+            }
+        }
         Ok(data)
     }
 
@@ -441,19 +448,33 @@ impl Gitter for BinaryGitter {
             let repo = repo.clone();
             let author_mappings = author_mappings.clone();
             let handle = tokio::spawn(async move {
-                let lines = GitExecutable::git_log(
-                    &repo,
-                    &[
-                        "--no-merges",
-                        "--date=rfc",
-                        &format!("--since={}", since),
-                        &format!("--before={}", before),
-                        "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                        "--numstat",
-                        "HEAD",
-                    ],
-                )
-                .await;
+                let lines = if since.is_empty() && before.is_empty() {
+                    GitExecutable::git_log(
+                        &repo,
+                        &[
+                            "--no-merges",
+                            "--date=rfc",
+                            "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                            "--numstat",
+                            "HEAD",
+                        ],
+                    )
+                    .await
+                } else {
+                    GitExecutable::git_log(
+                        &repo,
+                        &[
+                            "--no-merges",
+                            "--date=rfc",
+                            &format!("--since={}", since),
+                            &format!("--before={}", before),
+                            "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                            "--numstat",
+                            "HEAD",
+                        ],
+                    )
+                    .await
+                };
 
                 if let Err(e) = lines {
                     error!("Failed to execute git log command, error: {}", e);

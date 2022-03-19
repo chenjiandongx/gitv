@@ -55,7 +55,7 @@ pub struct FileExtStat {
 
 /// Tags 统计数据
 #[derive(Debug, Clone, Default)]
-pub struct TagStats {
+pub struct TagStat {
     /// Tag hash
     pub hash: String,
     /// 版本号
@@ -80,7 +80,7 @@ pub trait Gitter: Send + Sync {
         &self,
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
-    ) -> Result<Vec<TagStats>>;
+    ) -> Result<Vec<TagStat>>;
 }
 
 lazy_static! {
@@ -496,7 +496,7 @@ impl Gitter for BinaryGitter {
         &self,
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
-    ) -> Result<Vec<TagStats>> {
+    ) -> Result<Vec<TagStat>> {
         let mutex = Arc::new(tokio::sync::Mutex::new(vec![]));
         let mut handles = vec![];
 
@@ -548,7 +548,7 @@ impl Gitter for BinaryGitter {
                     Ok(log) => log,
                 };
 
-                let mut tag_stats = TagStats {
+                let mut tag_stats = TagStat {
                     stats: file_ext_stats,
                     ..Default::default()
                 };

@@ -29,10 +29,12 @@ pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
                         break;
                     }
                     s => match ctx.sql(s).await {
-                        Ok(batches) => {
-                            let batches = batches.collect().await.unwrap();
-                            pretty::print_batches(&batches)?;
-                        }
+                        Ok(batches) => match batches.collect().await {
+                            Ok(batches) => {
+                                pretty::print_batches(&batches)?;
+                            }
+                            Err(e) => println!("Error: {}", e),
+                        },
                         Err(e) => {
                             println!("Error: {}", e);
                         }
@@ -53,7 +55,7 @@ pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
     if let Ok(history) = history {
         return readline
             .save_history(&history)
-            .context("Failed to save query history")
+            .context("Failed to save query history");
     }
     Ok(())
 }

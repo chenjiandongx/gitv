@@ -150,7 +150,7 @@ impl GithubRepoFetcher {
                 }
             }
         }
-        
+
         info!("[github]: fetch total {} repos", repos.len());
         Ok(repos)
     }

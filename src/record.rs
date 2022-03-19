@@ -1,6 +1,7 @@
 use crate::{AuthorMapping, CreateAction, Database, Gitter};
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::prelude::*;
 use serde::Serialize;
 use std::{
     process::exit,
@@ -28,6 +29,13 @@ pub struct Record {
     pub deletion: i64,
     pub size: i64,
     pub files: i64,
+}
+
+fn datetime_rfc339(datetime: &str) -> String {
+    match DateTime::parse_from_rfc2822(datetime) {
+        Ok(t) => t.to_rfc3339().to_string(),
+        Err(_) => "".to_string(),
+    }
 }
 
 /// 定义 Record 序列化接口
@@ -60,7 +68,7 @@ async fn persist_records<T: 'static + Gitter + Clone>(
         let gitter = gitter.clone();
         let tx = tx.clone();
         let mutex = mutex.clone();
-        
+
         let handle = tokio::spawn(async move {
             let now = time::Instant::now();
             let branch = repo.branch.clone();
@@ -76,7 +84,7 @@ async fn persist_records<T: 'static + Gitter + Clone>(
                     let common_record = Record {
                         repo_name: repo.name.clone(),
                         branch: branch.clone().unwrap_or_default(),
-                        datetime: commit.datetime,
+                        datetime: datetime_rfc339(&commit.datetime),
                         author_name: commit.author.name,
                         author_email: commit.author.email,
                         author_domain: domain,
@@ -102,14 +110,13 @@ async fn persist_records<T: 'static + Gitter + Clone>(
                 }
             }
 
-            let tag_stats = gitter.tags(&repo, author_mappings.clone()).await;
-            if let Ok(tag_stats) = tag_stats {
-                for tag_stat in tag_stats {
+            if let Ok(tagstats) = gitter.tags(&repo, author_mappings.clone()).await {
+                for tagstat in tagstats {
                     let record = Record {
                         metric: RECORD_TAG.to_string(),
                         repo_name: repo.name.clone(),
-                        datetime: tag_stat.datetime,
-                        tag: tag_stat.tag,
+                        datetime: datetime_rfc339(&tagstat.datetime),
+                        tag: tagstat.tag,
                         ..Default::default()
                     };
                     if tx.send(record).await.is_err() {

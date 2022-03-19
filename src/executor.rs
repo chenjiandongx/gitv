@@ -30,7 +30,6 @@ lazy_static! {
         udf_hour,
         udf_period,
         udf_timestamp,
-        udf_timestamp_rfc3339,
         udf_timezone,
         udf_duration,
         udf_time_format,
@@ -50,7 +49,7 @@ const ERROR_DATEDATE_MISMATCHED: &str = "Mismatched: except rfc2882 datetime str
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
 /// output: 2021
 /// ```
 fn udf_year() -> ScalarUDF {
@@ -65,7 +64,7 @@ fn udf_year() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.year()),
                 Err(_) => None,
             })
@@ -88,8 +87,8 @@ fn udf_year() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
-/// output: 11
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
+/// output: 10
 /// ```
 fn udf_month() -> ScalarUDF {
     let month = |args: &[array::ArrayRef]| {
@@ -103,7 +102,7 @@ fn udf_month() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.month()),
                 Err(_) => None,
             })
@@ -126,7 +125,7 @@ fn udf_month() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
 /// output: "Mon"
 /// ```
 fn udf_weekday() -> ScalarUDF {
@@ -141,7 +140,7 @@ fn udf_weekday() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.weekday().to_string()),
                 Err(_) => None,
             })
@@ -164,7 +163,7 @@ fn udf_weekday() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
 /// output: 0
 /// ```
 fn udf_weeknum() -> ScalarUDF {
@@ -179,7 +178,7 @@ fn udf_weeknum() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.weekday().num_days_from_monday()),
                 Err(_) => None,
             })
@@ -202,8 +201,8 @@ fn udf_weeknum() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
-/// output: 15
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
+/// output: 14
 /// ```
 fn udf_hour() -> ScalarUDF {
     let hour = |args: &[array::ArrayRef]| {
@@ -217,7 +216,7 @@ fn udf_hour() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.hour()),
                 Err(_) => None,
             })
@@ -240,7 +239,7 @@ fn udf_hour() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
 /// output: "Afternoon"
 /// ```
 /// `hour`  |  `[0, 8)`  | `[8, 12)` |  `[12, 18)` | `[18, 24)`
@@ -258,7 +257,7 @@ fn udf_period() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => {
                     let s = match t.hour() {
                         0..=7 => String::from("Midnight"),
@@ -290,7 +289,7 @@ fn udf_period() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
 /// output: 1636960758
 /// ```
 fn udf_timestamp() -> ScalarUDF {
@@ -305,7 +304,7 @@ fn udf_timestamp() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.timestamp()),
                 Err(_) => None,
             })
@@ -324,50 +323,12 @@ fn udf_timestamp() -> ScalarUDF {
     )
 }
 
-/// 计算给定时间到现在时间的长度
-///
-/// # Example
-/// ```rust
-/// input<arg1: unix timestamp>: 1647272093
-/// output: "30hours 2minutes"
-/// ```
-fn udf_duration() -> ScalarUDF {
-    let duration = |args: &[array::ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<array::UInt64Array>();
-        if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
-        };
-
-        let array = base
-            .unwrap()
-            .iter()
-            .map(|x| {
-                let t = Utc::now().timestamp() - x.unwrap() as i64;
-                Some(humantime::format_duration(Duration::seconds(t).to_std().unwrap()).to_string())
-            })
-            .collect::<array::StringArray>();
-
-        Ok(Arc::new(array) as array::ArrayRef)
-    };
-
-    let duration = make_scalar_function(duration);
-    create_udf(
-        "duration",
-        vec![DataType::Int64],
-        Arc::new(DataType::Utf8),
-        Volatility::Immutable,
-        duration,
-    )
-}
-
 /// 计算给定时间的时区
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
-/// output: "+08:00"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
+/// output: "+07:00"
 /// ```
 fn udf_timezone() -> ScalarUDF {
     let timezone = |args: &[array::ArrayRef]| {
@@ -381,7 +342,7 @@ fn udf_timezone() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.timezone().to_string()),
                 Err(_) => None,
             })
@@ -400,41 +361,41 @@ fn udf_timezone() -> ScalarUDF {
     )
 }
 
-/// 计算给定 rfc339 字符串格式的时间戳
+/// 计算给定时间到现在时间的长度
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "2019-10-12T07:20:50.52Z"
-/// output: 1570864850 
+/// input<arg1: unix timestamp>: 1647272093
+/// output: "30hours 2minutes"
 /// ```
-fn udf_timestamp_rfc3339() -> ScalarUDF {
-    let timestamp_rcf3339 = |args: &[array::ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+fn udf_duration() -> ScalarUDF {
+    let duration = |args: &[array::ArrayRef]| {
+        let base = &args[0].as_any().downcast_ref::<array::Int64Array>();
         if base.is_none() {
             return Err(DataFusionError::Execution(String::from(
                 ERROR_DATEDATE_MISMATCHED,
             )));
-        }
+        };
 
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
-                Ok(t) => Some(t.timestamp()),
-                Err(_) => None,
+            .map(|x| {
+                let t = Utc::now().timestamp() - x.unwrap();
+                Some(humantime::format_duration(Duration::seconds(t).to_std().unwrap()).to_string())
             })
-            .collect::<array::Int64Array>();
+            .collect::<array::StringArray>();
 
         Ok(Arc::new(array) as array::ArrayRef)
     };
 
-    let timestamp_rcf3339 = make_scalar_function(timestamp_rcf3339);
+    let duration = make_scalar_function(duration);
     create_udf(
-        "timestamp_rfc3339",
-        vec![DataType::Utf8],
-        Arc::new(DataType::Int64),
+        "duration",
+        vec![DataType::Int64],
+        Arc::new(DataType::Utf8),
         Volatility::Immutable,
-        timestamp_rcf3339,
+        duration,
     )
 }
 
@@ -442,8 +403,8 @@ fn udf_timestamp_rfc3339() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822, arg2: String>: ("Mon, 15 Nov 2021 15:19:18 +0800", "%Y-%m-%d %H:%M:%S")
-/// output: "2021-11-15 15:19:18"
+/// input<arg1: rfc3339, arg2: String>: ("2021-10-12T14:20:50.52+07:00", "%Y-%m-%d %H:%M:%S")
+/// output: "2021-10-12 14:20:50"
 /// ```
 fn udf_time_format() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
@@ -465,7 +426,7 @@ fn udf_time_format() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| match DateTime::parse_from_rfc2822(x.unwrap()) {
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
                 Ok(t) => Some(t.format(format).to_string()),
                 Err(_) => None,
             })
@@ -487,7 +448,7 @@ fn udf_time_format() -> ScalarUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
 /// output: n
 /// ```
 fn udaf_active_longest_count() -> AggregateUDF {
@@ -509,8 +470,8 @@ fn udaf_active_longest_count() -> AggregateUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
-/// output: "2020-01-02"
+/// input<arg1: rfc3339>:"2021-10-12T14:20:50.52+07:00"
+/// output: "2021-10-12"
 /// ```
 fn udaf_active_longest_start() -> AggregateUDF {
     create_udaf(
@@ -531,8 +492,8 @@ fn udaf_active_longest_start() -> AggregateUDF {
 ///
 /// # Example
 /// ```rust
-/// input<arg1: rfc2822>: "Mon, 15 Nov 2021 15:19:18 +0800"
-/// output: "2020-01-05"
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
+/// output: "2021-10-12"
 /// ```
 fn udaf_active_longest_end() -> AggregateUDF {
     create_udaf(
@@ -598,7 +559,7 @@ impl TimeInputAccumulator {
         if let ScalarValue::Utf8(e) = value {
             e.iter()
                 .map(|v| {
-                    let ts = DateTime::parse_from_rfc2822(v).unwrap().timestamp();
+                    let ts = DateTime::parse_from_rfc3339(v).unwrap().timestamp();
                     self.data.push(ts);
                 })
                 .collect()
@@ -830,10 +791,10 @@ mod tests {
     fn get_datetime_context() -> ExecutionContext {
         let mut ctx = ExecutionContext::new();
         let datetime_array: array::LargeStringArray = vec![
-            "Tue, 2 May 2017 09:33:29 +0800",
-            "Sat, 1 Sep 2018 16:22:22 +0800",
-            "Sun, 2 Sep 2018 19:15:18 +0800",
-            "Mon, 25 Jun 2018 00:03:36 +0800",
+            "2021-10-12T14:20:50.52+08:00",
+            "2021-10-13T08:20:50.52+08:00",
+            "2020-01-02T22:20:50.52+07:00",
+            "2020-03-03T11:39:50.52+07:00",
         ]
         .into_iter()
         .map(Some)
@@ -873,10 +834,10 @@ mod tests {
             "+---------------------+",
             "| year(repo.datetime) |",
             "+---------------------+",
-            "| 2017                |",
-            "| 2018                |",
-            "| 2018                |",
-            "| 2018                |",
+            "| 2020                |",
+            "| 2020                |",
+            "| 2021                |",
+            "| 2021                |",
             "+---------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
@@ -897,10 +858,10 @@ mod tests {
             "+----------------------+",
             "| month(repo.datetime) |",
             "+----------------------+",
-            "| 5                    |",
-            "| 6                    |",
-            "| 9                    |",
-            "| 9                    |",
+            "| 1                    |",
+            "| 10                   |",
+            "| 10                   |",
+            "| 3                    |",
             "+----------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
@@ -921,10 +882,10 @@ mod tests {
             "+------------------------+",
             "| weekday(repo.datetime) |",
             "+------------------------+",
-            "| Mon                    |",
-            "| Sat                    |",
-            "| Sun                    |",
+            "| Thu                    |",
             "| Tue                    |",
+            "| Tue                    |",
+            "| Wed                    |",
             "+------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
@@ -945,10 +906,10 @@ mod tests {
             "+------------------------+",
             "| weeknum(repo.datetime) |",
             "+------------------------+",
-            "| 0                      |",
             "| 1                      |",
-            "| 5                      |",
-            "| 6                      |",
+            "| 1                      |",
+            "| 2                      |",
+            "| 3                      |",
             "+------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
@@ -969,10 +930,10 @@ mod tests {
             "+---------------------+",
             "| hour(repo.datetime) |",
             "+---------------------+",
-            "| 9                   |",
-            "| 16                  |",
-            "| 19                  |",
-            "| 0                   |",
+            "| 14                  |",
+            "| 8                   |",
+            "| 22                  |",
+            "| 11                  |",
             "+---------------------+",
         ];
         datafusion::assert_batches_eq!(expected, &result);
@@ -995,7 +956,7 @@ mod tests {
             "+-----------------------+",
             "| Afternoon             |",
             "| Evening               |",
-            "| Midnight              |",
+            "| Morning               |",
             "| Morning               |",
             "+-----------------------+",
         ];
@@ -1017,32 +978,11 @@ mod tests {
             "+--------------------------+",
             "| timestamp(repo.datetime) |",
             "+--------------------------+",
-            "| 1493688809               |",
-            "| 1529856216               |",
-            "| 1535790142               |",
-            "| 1535886918               |",
+            "| 1577978450               |",
+            "| 1583210390               |",
+            "| 1634019650               |",
+            "| 1634084450               |",
             "+--------------------------+",
-        ];
-        datafusion::assert_batches_sorted_eq!(expected, &result);
-    }
-
-    #[tokio::test]
-    async fn test_udf_timestamp_rfc3339() {
-        let mut ctx = get_datetime_context();
-        let result: Vec<RecordBatch> = ctx
-            .sql("select timestamp_rfc3339('2019-10-12T07:20:50.52Z') as ts from repo limit 1;")
-            .await
-            .unwrap()
-            .collect()
-            .await
-            .unwrap();
-
-        let expected = vec![
-            "+------------+",
-            "| ts         |",
-            "+------------+",
-            "| 1570864850 |",
-            "+------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
     }
@@ -1062,8 +1002,8 @@ mod tests {
             "+-------------------------+",
             "| timezone(repo.datetime) |",
             "+-------------------------+",
-            "| +08:00                  |",
-            "| +08:00                  |",
+            "| +07:00                  |",
+            "| +07:00                  |",
             "| +08:00                  |",
             "| +08:00                  |",
             "+-------------------------+",
@@ -1086,10 +1026,10 @@ mod tests {
             "+---------------------+",
             "| t                   |",
             "+---------------------+",
-            "| 2017-05-02 09:33:29 |",
-            "| 2018-06-25 00:03:36 |",
-            "| 2018-09-01 16:22:22 |",
-            "| 2018-09-02 19:15:18 |",
+            "| 2020-01-02 22:20:50 |",
+            "| 2020-03-03 11:39:50 |",
+            "| 2021-10-12 14:20:50 |",
+            "| 2021-10-13 08:20:50 |",
             "+---------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
@@ -1131,7 +1071,7 @@ mod tests {
             "+-------------------------------------+",
             "| active_longest_start(repo.datetime) |",
             "+-------------------------------------+",
-            "| 2018-09-01                          |",
+            "| 2021-10-12                          |",
             "+-------------------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
@@ -1152,7 +1092,7 @@ mod tests {
             "+-----------------------------------+",
             "| active_longest_end(repo.datetime) |",
             "+-----------------------------------+",
-            "| 2018-09-02                        |",
+            "| 2021-10-13                        |",
             "+-----------------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);

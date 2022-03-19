@@ -141,7 +141,7 @@ impl GithubRepoFetcher {
                         name: name.clone(),
                         branch: Some(repo.default_branch),
                         remote: Some(repo.clone_url),
-                        path: Path::new(&config.base_dir.clone())
+                        path: Path::new(&config.clone_dir)
                             .join(Path::new(&name))
                             .to_str()
                             .unwrap()

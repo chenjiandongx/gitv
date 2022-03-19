@@ -1,10 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
-use std::{
-    fs::File,
-    path::{Path, PathBuf},
-};
+use std::fs::File;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,9 +41,7 @@ impl Author {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Database {
-    pub table_name: String,
-    pub base_dir: String,
-    pub source: String,
+    pub path: String,
     pub files: Option<Vec<String>>,
     pub repos: Option<Vec<Repository>>,
 }
@@ -69,16 +64,6 @@ impl Database {
     }
 }
 
-impl Database {
-    pub fn location(&self, ext: String) -> PathBuf {
-        Path::new(self.base_dir.as_str()).join(format!(
-            "{}.{}",
-            self.table_name.clone(),
-            ext.as_str()
-        ))
-    }
-}
-
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct FetchAction {
     pub github: Option<Vec<Github>>,
@@ -87,7 +72,7 @@ pub struct FetchAction {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Github {
-    pub base_dir: String,
+    pub clone_dir: String,
     pub destination: String,
     pub token: String,
     pub exclude_orgs: Option<Vec<String>>,

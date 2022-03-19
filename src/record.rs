@@ -41,7 +41,6 @@ fn datetime_rfc339(datetime: &str) -> String {
 /// 定义 Record 序列化接口
 #[async_trait]
 pub trait RecordSerializer {
-    fn extension(&self) -> String;
     async fn serialize(&self, config: CreateAction) -> Result<()>;
 }
 
@@ -50,7 +49,6 @@ static FLUSH_SIZE: usize = 500;
 
 async fn persist_records<T: 'static + Gitter + Clone>(
     gitter: T,
-    ext: String,
     database: Database,
     author_mappings: Vec<AuthorMapping>,
 ) -> Result<()> {
@@ -140,7 +138,7 @@ async fn persist_records<T: 'static + Gitter + Clone>(
     }
 
     let rev = tokio::spawn(async move {
-        let mut wtr = csv::Writer::from_path(database.location(ext)).unwrap();
+        let mut wtr = csv::Writer::from_path(database.path).unwrap();
         let mut n: usize = 0;
 
         while let Some(record) = rx.recv().await {
@@ -187,26 +185,16 @@ impl<T> CsvSerializer<T> {
 
 #[async_trait]
 impl<T: 'static + Gitter + Clone> RecordSerializer for CsvSerializer<T> {
-    fn extension(&self) -> String {
-        String::from("csv")
-    }
-
     async fn serialize(&self, config: CreateAction) -> Result<()> {
         let mut handles = vec![];
         for database in config.databases {
             let gitter = self.gitter.clone();
-            let extension = self.extension();
             let database = database.clone();
             let author_mappings = config.author_mappings.clone();
 
             let handle = tokio::spawn(async move {
-                let r = persist_records(
-                    gitter,
-                    extension,
-                    database,
-                    author_mappings.unwrap_or_default(),
-                )
-                .await;
+                let r =
+                    persist_records(gitter, database, author_mappings.unwrap_or_default()).await;
                 if let Err(e) = r {
                     error!("Failed to persist records, error: {}", e);
                     exit(1)

@@ -8,7 +8,7 @@ mod shell;
 
 use anyhow::Result;
 use chrono::Local;
-use clap::Parser;
+use clap::{IntoApp, Parser};
 use config::*;
 use executor::*;
 use fetcher::*;
@@ -41,7 +41,7 @@ fn init_logger() {
 }
 
 #[derive(Debug, Parser)]
-#[clap(author, version, about, long_about = None)]
+#[clap(version, about, long_about = None)]
 struct Cli {
     /// Retrieve repos and create new databases
     #[clap(short, long)]
@@ -59,7 +59,7 @@ struct Cli {
     #[clap(short, long)]
     shell: bool,
 
-    /// config file path (default: gitx.yaml)
+    /// config file path (default: gitv.yaml)
     path: Option<String>,
 }
 
@@ -68,7 +68,12 @@ async fn main() -> Result<()> {
     init_logger();
 
     let cli: Cli = Cli::parse();
-    let c: Config = match config::load_config(&cli.path.unwrap_or("gitx.yaml".to_string())) {
+    if !cli.create && !cli.fetch && !cli.render && !cli.shell {
+        Cli::command().print_help().unwrap();
+        exit(0)
+    }
+
+    let c: Config = match config::load_config(&cli.path.unwrap_or("gitv.yaml".to_string())) {
         Err(e) => {
             error!("Load config error: {}", e);
             exit(1);

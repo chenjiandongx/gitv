@@ -445,7 +445,7 @@ fn udf_datetime_format() -> ScalarUDF {
     )
 }
 
-/// 格式化字符串时间
+/// 格式化时间戳时间
 ///
 /// # Example
 /// ```rust

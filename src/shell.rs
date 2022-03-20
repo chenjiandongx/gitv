@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use datafusion::{arrow::util::pretty, prelude::ExecutionContext};
 use rustyline::{error::ReadlineError, Editor};
 use std::path::PathBuf;
+use tokio::time;
 
 /// 记录 gitx shell 的语句执行历史，默认路径为 ~/.gitx
 fn history_path() -> Result<PathBuf> {
@@ -31,19 +32,23 @@ pub async fn console_loop(mut ctx: ExecutionContext) -> anyhow::Result<()> {
                     s => {
                         if s.is_empty() {
                             println!("gitx(sql)> ");
-                            continue
+                            continue;
                         }
+
+                        let now = time::Instant::now();
                         match ctx.sql(s).await {
-                        Ok(batches) => match batches.collect().await {
-                            Ok(batches) => {
-                                pretty::print_batches(&batches)?;
+                            Ok(batches) => match batches.collect().await {
+                                Ok(batches) => {
+                                    pretty::print_batches(&batches)?;
+                                    println!("Query OK, elapsed: {:#?}\n", now.elapsed())
+                                }
+                                Err(e) => println!("Error: {}", e),
+                            },
+                            Err(e) => {
+                                println!("Error: {}", e);
                             }
-                            Err(e) => println!("Error: {}", e),
-                        },
-                        Err(e) => {
-                            println!("Error: {}", e);
                         }
-                    }}
+                    }
                 }
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {

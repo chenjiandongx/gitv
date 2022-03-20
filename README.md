@@ -199,40 +199,47 @@ gitv 利用 [arrow-datafusion](https://github.com/apache/arrow-datafusion) 作�
 arrow-datafusion 项目目前还在快速发展中，对 SQL 的支持也会越来越完善，除了常用的聚合分析函数 count, min, max, avg 等，gitv 还提供了一些自定义的函数，包括时间函数以及 active 计算函数。
 
 时间函数列表，时间格式为 rfc3339：
-| 函数名           | 描述                                           | 输入示例                                        | 输出示例            |
-| ---------------- | ---------------------------------------------- | ----------------------------------------------- | ------------------- |
-| year             | 计算给定时间的年份                             | 2021-10-12T14:20:50.52+07:00                    | 2021                |
-| month            | 计算给定时间的月份                             | 2021-10-12T14:20:50.52+07:00                    | 10                  |
-| weekday          | 计算给定时间的星期字符                         | 2021-10-12T14:20:50.52+07:00                    | Mon                 |
-| weeknum          | 计算给定时间的星期数字                         | 2021-10-12T14:20:50.52+07:00                    | 0                   |
-| hour             | 计算给定时间的小时数                           | 2021-10-12T14:20:50.52+07:00                    | 14                  |
-| period           | 计算给定时间的状态（午夜、早上、下午以及晚上） | 2021-10-12T14:20:50.52+07:00                    | Afternoon           |
-| timestamp        | 计算给定时间的 Unix 时间戳                     | 2021-10-12T14:20:50.52+07:00                    | 1636960758          |
-| timezone         | 计算给定时间的时区                             | 2021-10-12T14:20:50.52+07:00                    | +07:00              |
-| duration         | 计算给定时间到现在时间的长度                   | 1647272093                                      | 30hours 2minutes    |
-| datetime_format  | 格式化字符串时间                               | 2021-10-12T14:20:50.52+07:00, %Y-%m-%d %H:%M:%S | 2021-10-12 14:20:50 |
-| timestamp_format | 格式化时间戳时间                               | 1647272093, %Y-%m-%d %H:%M:%S                   | 2021-10-12 14:20:50 |
+| 函数名            | 描述                                           | 输入示例                     | 输出示例                     |
+| ----------------- | ---------------------------------------------- | ---------------------------- | ---------------------------- |
+| year              | 计算给定时间的年份                             | 2021-10-12T14:20:50.52+07:00 | 2021                         |
+| month             | 计算给定时间的月份                             | 2021-10-12T14:20:50.52+07:00 | 10                           |
+| weekday           | 计算给定时间的星期字符                         | 2021-10-12T14:20:50.52+07:00 | Mon                          |
+| weeknum           | 计算给定时间的星期数字                         | 2021-10-12T14:20:50.52+07:00 | 0                            |
+| hour              | 计算给定时间的小时数                           | 2021-10-12T14:20:50.52+07:00 | 14                           |
+| period            | 计算给定时间的状态（午夜、早上、下午以及晚上） | 2021-10-12T14:20:50.52+07:00 | Afternoon                    |
+| timestamp         | 计算给定时间的 Unix 时间戳                     | 2021-10-12T14:20:50.52+07:00 | 1636960758                   |
+| timezone          | 计算给定时间的时区                             | 2021-10-12T14:20:50.52+07:00 | +07:00                       |
+| duration          | 计算给定时间到现在时间的长度                   | 1647272093                   | 30hours 2minutes             |
+| timestamp_rfc3339 | 格式化时间戳时间                               | 1647272093                   | 2021-10-12T14:20:50.52+07:00 |
 
 SQL 示例：
 ```shell
-gitx(sql)> select timezone(datetime), year(datetime), weekday(datetime), weeknum(datetime), period(datetime) from repo where metric='CHANGE' limit 1;
-+-------------------------+---------------------+------------------------+------------------------+-----------------------+
-| timezone(repo.datetime) | year(repo.datetime) | weekday(repo.datetime) | weeknum(repo.datetime) | period(repo.datetime) |
-+-------------------------+---------------------+------------------------+------------------------+-----------------------+
-| +08:00                  | 2018                | Wed                    | 2                      | Afternoon             |
-+-------------------------+---------------------+------------------------+------------------------+-----------------------+
-
-gitx(sql)> select repo_name, min(timestamp(datetime)) as ts, timestamp_format(min(timestamp(datetime)), '%Y-%m-%d %H:%M:%S') as created, duration(min(timestamp(datetime))) as duration from repo where metric='COMMIT' and author_name='chenjiandongx' group by repo_name order by ts limit 5;
-
-+------------------------------------+------------+---------------------+------------------------------------+
-| repo_name                          | ts         | created             | duration                           |
-+------------------------------------+------------+---------------------+------------------------------------+
-| chenjiandongx/soksaccounts         | 1491827735 | 2017-04-10 12:35:35 | 4years 11months 8days 4h 52m 33s   |
-| chenjiandongx/mmjpg                | 1492145211 | 2017-04-14 04:46:51 | 4years 11months 4days 12h 41m 17s  |
-| chenjiandongx/stackoverflow-spider | 1492256146 | 2017-04-15 11:35:46 | 4years 11months 3days 5h 52m 22s   |
-| chenjiandongx/mzitu                | 1492433915 | 2017-04-17 12:58:35 | 4years 11months 1day 4h 29m 33s    |
-| chenjiandongx/Github-spider        | 1492950023 | 2017-04-23 12:20:23 | 4years 10months 25days 15h 41m 21s |
-+------------------------------------+------------+---------------------+------------------------------------+
+gitx(sql)> select
+    repo_name,
+    min(timestamp(datetime)) as ts,
+    timestamp_rfc3339(min(timestamp(datetime))) as created,
+    duration(min(timestamp(datetime))) as duration
+from
+    repo
+where
+    metric = 'COMMIT'
+    and author_name = 'chenjiandongx'
+group by
+    repo_name
+order by
+    ts
+limit
+    5;
++------------------------------------+------------+---------------------------+-----------------------------------+
+| repo_name                          | ts         | created                   | duration                          |
++------------------------------------+------------+---------------------------+-----------------------------------+
+| chenjiandongx/soksaccounts         | 1491827735 | 2017-04-10T12:35:35+00:00 | 4years 11months 8days 20h 54m 4s  |
+| chenjiandongx/mmjpg                | 1492145211 | 2017-04-14T04:46:51+00:00 | 4years 11months 5days 4h 42m 48s  |
+| chenjiandongx/stackoverflow-spider | 1492256146 | 2017-04-15T11:35:46+00:00 | 4years 11months 3days 21h 53m 53s |
+| chenjiandongx/mzitu                | 1492433915 | 2017-04-17T12:58:35+00:00 | 4years 11months 1day 20h 31m 4s   |
+| chenjiandongx/Github-spider        | 1492950023 | 2017-04-23T12:20:23+00:00 | 4years 10months 26days 7h 42m 52s |
++------------------------------------+------------+---------------------------+-----------------------------------+
+Query OK, elapsed: 168.389111ms
 ```
 
 active 计算函数：
@@ -244,12 +251,21 @@ active 计算函数：
 
 SQL 示例：
 ```shell
-gitx(sql)> select active_longest_count(datetime), active_longest_start(datetime), active_longest_end(datetime) from repo where metric='COMMIT' and author_name='chenjiandongx';
-+-------------------------------------+-------------------------------------+-----------------------------------+
-| active_longest_count(repo.datetime) | active_longest_start(repo.datetime) | active_longest_end(repo.datetime) |
-+-------------------------------------+-------------------------------------+-----------------------------------+
-| 17                                  | 2017-07-17                          | 2017-08-02                        |
-+-------------------------------------+-------------------------------------+-----------------------------------+
+gitx(sql)> select
+    active_longest_count(datetime) as active_longest_count,
+    active_longest_start(datetime) as active_longest_start,
+    active_longest_end(datetime) as active_longest_end
+from
+    repo
+where
+    metric = 'COMMIT'
+    and author_name = 'chenjiandongx';
++----------------------+----------------------+--------------------+
+| active_longest_count | active_longest_start | active_longest_end |
++----------------------+----------------------+--------------------+
+| 17                   | 2017-07-17           | 2017-08-02         |
++----------------------+----------------------+--------------------+
+Query OK, elapsed: 190.568999ms
 ```
 
 ### Render Action

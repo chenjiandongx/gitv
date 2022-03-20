@@ -32,8 +32,7 @@ lazy_static! {
         udf_timestamp,
         udf_timezone,
         udf_duration,
-        udf_datetime_format,
-        udf_timestamp_format,
+        udf_timestamp_rfc3339,
     ];
 
     /// udaf 函数集合
@@ -400,59 +399,14 @@ fn udf_duration() -> ScalarUDF {
     )
 }
 
-/// 格式化字符串时间
-///
-/// # Example
-/// ```rust
-/// input<arg1: rfc3339, arg2: String>: ("2021-10-12T14:20:50.52+07:00", "%Y-%m-%d %H:%M:%S")
-/// output: "2021-10-12 14:20:50"
-/// ```
-fn udf_datetime_format() -> ScalarUDF {
-    let date = |args: &[array::ArrayRef]| {
-        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
-        if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
-        };
-
-        let format = &args[1].as_any().downcast_ref::<array::StringArray>();
-        if format.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                "Mismatched: except time format",
-            )));
-        }
-
-        let format = format.unwrap().value(0);
-        let array = base
-            .unwrap()
-            .iter()
-            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
-                Ok(t) => Some(t.format(format).to_string()),
-                Err(_) => None,
-            })
-            .collect::<array::StringArray>();
-        Ok(Arc::new(array) as array::ArrayRef)
-    };
-
-    let date = make_scalar_function(date);
-    create_udf(
-        "datetime_format",
-        vec![DataType::Utf8, DataType::Utf8],
-        Arc::new(DataType::Utf8),
-        Volatility::Immutable,
-        date,
-    )
-}
-
 /// 格式化时间戳时间
 ///
 /// # Example
 /// ```rust
-/// input<arg1: unix timestamp, arg2: String>: (1647272093, "%Y-%m-%d %H:%M:%S")
-/// output: "2021-10-12 14:20:50"
+/// input<arg1: unix timestamp, arg2: String>: 1647272093
+/// output: "2021-10-12T14:20:50.52+07:00"
 /// ```
-fn udf_timestamp_format() -> ScalarUDF {
+fn udf_timestamp_rfc3339() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::Int64Array>();
         if base.is_none() {
@@ -461,26 +415,18 @@ fn udf_timestamp_format() -> ScalarUDF {
             )));
         };
 
-        let format = &args[1].as_any().downcast_ref::<array::StringArray>();
-        if format.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                "Mismatched: except time format",
-            )));
-        }
-
-        let format = format.unwrap().value(0);
         let array = base
             .unwrap()
             .iter()
-            .map(|x| Some(Utc.timestamp(x.unwrap(), 0).format(format).to_string()))
+            .map(|x| Some(Utc.timestamp(x.unwrap(), 0).to_rfc3339().to_string()))
             .collect::<array::StringArray>();
         Ok(Arc::new(array) as array::ArrayRef)
     };
 
     let date = make_scalar_function(date);
     create_udf(
-        "timestamp_format",
-        vec![DataType::Int64, DataType::Utf8],
+        "timestamp_rfc3339",
+        vec![DataType::Int64],
         Arc::new(DataType::Utf8),
         Volatility::Immutable,
         date,
@@ -610,31 +556,21 @@ impl TimeInputAccumulator {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn merge(&mut self, _: &[ScalarValue]) -> Result<()> {
-        panic!("implement me")
-    }
-
-    #[allow(dead_code)]
-    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
-        if states.is_empty() {
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        if values.is_empty() {
             return Ok(());
         };
-        let mut data = vec![];
-        (0..states[0].len()).for_each(|index| {
-            let v = states
+        (0..values[0].len()).try_for_each(|index| {
+            let v = values
                 .iter()
                 .map(|array| ScalarValue::try_from_array(array, index))
-                .collect::<Result<Vec<_>>>();
-            if v.is_ok() {
-                data.extend(v.unwrap());
-            }
-        });
-
-        self.merge(&data)
+                .collect::<Result<Vec<_>>>()?;
+            self.update(&v)
+        })
     }
 }
 
+#[derive(Debug, Clone)]
 enum ActiveLongestType {
     /// 最大连续天数
     Count,
@@ -709,7 +645,7 @@ impl ActiveLongest {
         }
     }
 
-    fn merge_index<S: Into<u8>>(&mut self, states: &[ScalarValue], index: S) -> Result<()> {
+    fn merge_index<I: Into<u8>>(&mut self, states: &[ScalarValue], index: I) -> Result<()> {
         for state in states {
             if let ScalarValue::List(Some(values), _) = state {
                 for v in values.iter() {
@@ -729,6 +665,23 @@ impl ActiveLongest {
             _ => (),
         }
         Ok(())
+    }
+
+    fn merge_batch<I: Into<u8> + Clone>(
+        &mut self,
+        states: &[ArrayRef],
+        merge_index: I,
+    ) -> Result<()> {
+        if states.is_empty() {
+            return Ok(());
+        };
+        (0..states[0].len()).try_for_each(|index| {
+            let v = states
+                .iter()
+                .map(|array| ScalarValue::try_from_array(array, index))
+                .collect::<Result<Vec<_>>>()?;
+            self.merge_index(&v, merge_index.clone())
+        })
     }
 }
 
@@ -750,16 +703,16 @@ impl Accumulator for ActiveLongestCount {
         self.al.tla.state()
     }
 
-    fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
-        self.al.tla.update(values)
-    }
-
-    fn merge(&mut self, states: &[ScalarValue]) -> Result<()> {
-        self.al.merge_index(states, ActiveLongestType::Count)
-    }
-
     fn evaluate(&self) -> Result<ScalarValue> {
         Ok(ScalarValue::from(self.al.tla.n))
+    }
+
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        self.al.tla.update_batch(values)
+    }
+
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        self.al.merge_batch(states, ActiveLongestType::Count)
     }
 }
 
@@ -783,12 +736,12 @@ impl Accumulator for ActiveLongestTime {
         self.al.tla.state()
     }
 
-    fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
-        self.al.tla.update(values)
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        self.al.tla.update_batch(values)
     }
 
-    fn merge(&mut self, states: &[ScalarValue]) -> Result<()> {
-        self.al.merge_index(states, self.index)
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        self.al.merge_batch(states, self.index)
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {
@@ -1055,10 +1008,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_udf_datetime_format() {
+    async fn test_udf_timestamp_rfc3339() {
         let mut ctx = get_datetime_context();
         let result: Vec<RecordBatch> = ctx
-            .sql("select datetime_format(datetime, '%Y-%m-%d %H:%M:%S') as t from repo;")
+            .sql("select timestamp_rfc3339(1647272093) as t from repo limit 1;")
             .await
             .unwrap()
             .collect()
@@ -1066,35 +1019,11 @@ mod tests {
             .unwrap();
 
         let expected = vec![
-            "+---------------------+",
-            "| t                   |",
-            "+---------------------+",
-            "| 2020-01-02 22:20:50 |",
-            "| 2020-03-03 11:39:50 |",
-            "| 2021-10-12 14:20:50 |",
-            "| 2021-10-13 08:20:50 |",
-            "+---------------------+",
-        ];
-        datafusion::assert_batches_sorted_eq!(expected, &result);
-    }
-
-    #[tokio::test]
-    async fn test_udf_timestamp_format() {
-        let mut ctx = get_datetime_context();
-        let result: Vec<RecordBatch> = ctx
-            .sql("select timestamp_format(1647272093, '%Y-%m-%d %H:%M:%S') as t from repo limit 1;")
-            .await
-            .unwrap()
-            .collect()
-            .await
-            .unwrap();
-
-        let expected = vec![
-            "+---------------------+",
-            "| t                   |",
-            "+---------------------+",
-            "| 2022-03-14 15:34:53 |",
-            "+---------------------+",
+            "+---------------------------+",
+            "| t                         |",
+            "+---------------------------+",
+            "| 2022-03-14T15:34:53+00:00 |",
+            "+---------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
     }

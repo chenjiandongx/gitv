@@ -18,7 +18,7 @@ use datafusion::{
     scalar::ScalarValue,
 };
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 lazy_static! {
     /// udf 函数集合
@@ -27,6 +27,7 @@ lazy_static! {
         udf_month,
         udf_weekday,
         udf_weeknum,
+        udf_dateday,
         udf_hour,
         udf_period,
         udf_timestamp,
@@ -37,13 +38,35 @@ lazy_static! {
 
     /// udaf 函数集合
     static ref UDAFS: Vec<fn() -> AggregateUDF> = vec![
-        udaf_active_longest_count,
+        udaf_distinct,
+        udaf_active_longest_days,
         udaf_active_longest_start,
         udaf_active_longest_end,
     ];
 }
 
-const ERROR_DATEDATE_MISMATCHED: &str = "Mismatched: except rfc2882 datetime string";
+/// sql 查询执行器
+pub struct Executor;
+
+impl Executor {
+    pub async fn create_context(config: Vec<config::Execution>) -> Result<ExecutionContext> {
+        let mut ctx = ExecutionContext::new();
+        for udf in UDFS.iter() {
+            ctx.register_udf(udf());
+        }
+        for udaf in UDAFS.iter() {
+            ctx.register_udaf(udaf())
+        }
+
+        for c in config {
+            ctx.register_csv(&c.table_name, &c.file, CsvReadOptions::new())
+                .await?;
+        }
+        Ok(ctx)
+    }
+}
+
+const ERROR_DATEDATE_MISMATCHED: &str = "Mismatched: except rfc3339 datetime string";
 
 /// 计算给定时间的年份
 ///
@@ -194,6 +217,44 @@ fn udf_weeknum() -> ScalarUDF {
         Arc::new(DataType::UInt32),
         Volatility::Immutable,
         week,
+    )
+}
+
+/// 计算给定时间的日期
+///
+/// # Example
+/// ```rust
+/// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
+/// output: "2021-10-12"
+/// ```
+fn udf_dateday() -> ScalarUDF {
+    let dateday = |args: &[array::ArrayRef]| {
+        let base = &args[0].as_any().downcast_ref::<array::StringArray>();
+        if base.is_none() {
+            return Err(DataFusionError::Execution(String::from(
+                ERROR_DATEDATE_MISMATCHED,
+            )));
+        };
+
+        let array = base
+            .unwrap()
+            .iter()
+            .map(|x| match DateTime::parse_from_rfc3339(x.unwrap()) {
+                Ok(t) => Some(t.format("%Y-%m-%d").to_string()),
+                Err(_) => None,
+            })
+            .collect::<array::StringArray>();
+
+        Ok(Arc::new(array) as array::ArrayRef)
+    };
+
+    let dateday = make_scalar_function(dateday);
+    create_udf(
+        "dateday",
+        vec![DataType::Utf8],
+        Arc::new(DataType::Utf8),
+        Volatility::Immutable,
+        dateday,
     )
 }
 
@@ -433,16 +494,92 @@ fn udf_timestamp_rfc3339() -> ScalarUDF {
     )
 }
 
+/// 去重函数
+///
+/// # Example
+/// ```rust
+/// input<arg1: String>: "user/repo"
+/// output: "user/repo"
+/// ```
+fn udaf_distinct() -> AggregateUDF {
+    create_udaf(
+        "distinct",
+        DataType::Utf8,
+        Arc::new(DataType::Utf8),
+        Volatility::Immutable,
+        Arc::new(|| Ok(Box::new(Distinct::new()))),
+        Arc::new(vec![DataType::List(Box::new(Field::new(
+            "item",
+            DataType::Utf8,
+            true,
+        )))]),
+    )
+}
+
+#[derive(Debug)]
+struct Distinct {
+    data: HashSet<ScalarValue>,
+}
+
+impl Distinct {
+    fn new() -> Self {
+        Self {
+            data: HashSet::new(),
+        }
+    }
+}
+
+impl Accumulator for Distinct {
+    fn state(&self) -> Result<Vec<ScalarValue>> {
+        let mut set = HashSet::new();
+        for d in self.data.iter() {
+            set.insert(d.clone());
+        }
+
+        let v: Vec<ScalarValue> = set.into_iter().collect();
+        let values = ScalarValue::List(Some(Box::new(v)), Box::new(DataType::Utf8));
+        Ok(vec![values])
+    }
+
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        if values.is_empty() {
+            return Ok(());
+        };
+        (0..values[0].len()).try_for_each(|index| {
+            let v = values
+                .iter()
+                .map(|array| ScalarValue::try_from_array(array, index))
+                .collect::<Result<Vec<_>>>()?;
+            for item in v {
+                self.data.insert(item);
+            }
+            Ok(())
+        })
+    }
+
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        self.update_batch(states)
+    }
+
+    fn evaluate(&self) -> Result<ScalarValue> {
+        let data: Vec<ScalarValue> = self.data.clone().into_iter().collect();
+        Ok(ScalarValue::List(
+            Some(Box::new(data)),
+            Box::new(DataType::Utf8),
+        ))
+    }
+}
+
 /// 计算最大连续多少天有提交记录
 ///
 /// # Example
 /// ```rust
 /// input<arg1: rfc3339>: "2021-10-12T14:20:50.52+07:00"
-/// output: n
+/// output: 1
 /// ```
-fn udaf_active_longest_count() -> AggregateUDF {
+fn udaf_active_longest_days() -> AggregateUDF {
     create_udaf(
-        "active_longest_count",
+        "active_longest_days",
         DataType::Utf8,
         Arc::new(DataType::Int64),
         Volatility::Immutable,
@@ -497,27 +634,6 @@ fn udaf_active_longest_end() -> AggregateUDF {
             true,
         )))]),
     )
-}
-
-/// sql 查询执行器
-pub struct Executor;
-
-impl Executor {
-    pub async fn create_context(config: Vec<config::Execution>) -> Result<ExecutionContext> {
-        let mut ctx = ExecutionContext::new();
-        for udf in UDFS.iter() {
-            ctx.register_udf(udf());
-        }
-        for udaf in UDAFS.iter() {
-            ctx.register_udaf(udaf())
-        }
-
-        for c in config {
-            ctx.register_csv(&c.table_name, &c.file, CsvReadOptions::new())
-                .await?;
-        }
-        Ok(ctx)
-    }
 }
 
 /// 所有时间输入类型的 Accumulator 的基类
@@ -795,12 +911,23 @@ mod tests {
         .into_iter()
         .map(Some)
         .collect();
+
+        let repo_array: array::LargeStringArray = vec![
+            "chenjiandongx/gitv",
+            "chenjiandongx/gitv",
+            "chenjiandongx/gitv",
+            "rust-lang/rust",
+        ]
+        .into_iter()
+        .map(Some)
+        .collect();
+
         let datetime_array = Arc::new(datetime_array);
-        let schema = Arc::new(Schema::new(vec![Field::new(
-            "datetime",
-            datetime_array.data_type().clone(),
-            false,
-        )]));
+        let repo_array = Arc::new(repo_array);
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("datetime", datetime_array.data_type().clone(), false),
+            Field::new("repo_name", repo_array.data_type().clone(), false),
+        ]));
 
         for udf in UDFS.iter() {
             ctx.register_udf(udf());
@@ -809,7 +936,7 @@ mod tests {
             ctx.register_udaf(udaf())
         }
 
-        let batch = RecordBatch::try_new(schema.clone(), vec![datetime_array]).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), vec![datetime_array, repo_array]).unwrap();
         let provider = MemTable::try_new(schema.clone(), vec![vec![batch]]).unwrap();
         ctx.register_table("repo", Arc::new(provider)).unwrap();
         ctx
@@ -906,6 +1033,30 @@ mod tests {
             "| 1                      |",
             "| 2                      |",
             "| 3                      |",
+            "+------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udf_dateday() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select dateday(datetime) from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+------------------------+",
+            "| dateday(repo.datetime) |",
+            "+------------------------+",
+            "| 2020-01-02             |",
+            "| 2020-03-03             |",
+            "| 2021-10-12             |",
+            "| 2021-10-13             |",
             "+------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
@@ -1087,6 +1238,28 @@ mod tests {
             "+-----------------------------------+",
             "| 2021-10-13                        |",
             "+-----------------------------------+",
+        ];
+        datafusion::assert_batches_sorted_eq!(expected, &result);
+    }
+
+    #[tokio::test]
+    async fn test_udaf_distinct() {
+        let mut ctx = get_datetime_context();
+        let result: Vec<RecordBatch> = ctx
+            .sql("select distinct(repo_name) as repo_name from repo;")
+            .await
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        let expected = vec![
+            "+--------------------+",
+            "| repo_name          |",
+            "+--------------------+",
+            "| chenjiandongx/gitv |",
+            "| rust-lang/rust     |",
+            "+--------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
     }

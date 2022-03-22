@@ -222,6 +222,10 @@ impl Parser {
                         let p = Path::new(cap);
                         if p.extension().is_some() {
                             change.ext = p.extension().unwrap().to_str().unwrap().to_string();
+                            let n = change.ext.len() as usize - 1;
+                            if !change.ext.chars().nth(n).unwrap().is_ascii_alphanumeric() {
+                                change.ext.remove(n);
+                            }
                         } else {
                             change.ext = "".to_string();
                         }

@@ -52,7 +52,7 @@ async fn persist_records<T: 'static + Gitter + Clone>(
     database: Database,
     author_mappings: Vec<AuthorMapping>,
 ) -> Result<()> {
-    let repos = database.load().unwrap();
+    let repos = database.load()?;
     let total = repos.len();
 
     let (tx, mut rx) = sync::mpsc::channel::<Record>(BUFFER_SIZE);

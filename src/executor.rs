@@ -18,7 +18,7 @@ use datafusion::{
     scalar::ScalarValue,
 };
 use lazy_static::lazy_static;
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 lazy_static! {
     /// udf 函数集合
@@ -38,7 +38,6 @@ lazy_static! {
 
     /// udaf 函数集合
     static ref UDAFS: Vec<fn() -> AggregateUDF> = vec![
-        udaf_distinct,
         udaf_active_longest_days,
         udaf_active_longest_start,
         udaf_active_longest_end,
@@ -492,82 +491,6 @@ fn udf_timestamp_rfc3339() -> ScalarUDF {
         Volatility::Immutable,
         date,
     )
-}
-
-/// 去重函数
-///
-/// # Example
-/// ```rust
-/// input<arg1: String>: "user/repo"
-/// output: "user/repo"
-/// ```
-fn udaf_distinct() -> AggregateUDF {
-    create_udaf(
-        "distinct",
-        DataType::Utf8,
-        Arc::new(DataType::Utf8),
-        Volatility::Immutable,
-        Arc::new(|| Ok(Box::new(Distinct::new()))),
-        Arc::new(vec![DataType::List(Box::new(Field::new(
-            "item",
-            DataType::Utf8,
-            true,
-        )))]),
-    )
-}
-
-#[derive(Debug)]
-struct Distinct {
-    data: HashSet<ScalarValue>,
-}
-
-impl Distinct {
-    fn new() -> Self {
-        Self {
-            data: HashSet::new(),
-        }
-    }
-}
-
-impl Accumulator for Distinct {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        let mut set = HashSet::new();
-        for d in self.data.iter() {
-            set.insert(d.clone());
-        }
-
-        let v: Vec<ScalarValue> = set.into_iter().collect();
-        let values = ScalarValue::List(Some(Box::new(v)), Box::new(DataType::Utf8));
-        Ok(vec![values])
-    }
-
-    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
-        if values.is_empty() {
-            return Ok(());
-        };
-        (0..values[0].len()).try_for_each(|index| {
-            let v = values
-                .iter()
-                .map(|array| ScalarValue::try_from_array(array, index))
-                .collect::<Result<Vec<_>>>()?;
-            for item in v {
-                self.data.insert(item);
-            }
-            Ok(())
-        })
-    }
-
-    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
-        self.update_batch(states)
-    }
-
-    fn evaluate(&self) -> Result<ScalarValue> {
-        let data: Vec<ScalarValue> = self.data.clone().into_iter().collect();
-        Ok(ScalarValue::List(
-            Some(Box::new(data)),
-            Box::new(DataType::Utf8),
-        ))
-    }
 }
 
 /// 计算最大连续多少天有提交记录
@@ -1180,10 +1103,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_udaf_active_longest_count() {
+    async fn test_udaf_active_longest_days() {
         let mut ctx = get_datetime_context();
         let result: Vec<RecordBatch> = ctx
-            .sql("select active_longest_count(datetime) from repo;")
+            .sql("select active_longest_days(datetime) from repo;")
             .await
             .unwrap()
             .collect()
@@ -1191,11 +1114,11 @@ mod tests {
             .unwrap();
 
         let expected = vec![
-            "+-------------------------------------+",
-            "| active_longest_count(repo.datetime) |",
-            "+-------------------------------------+",
-            "| 2                                   |",
-            "+-------------------------------------+",
+            "+------------------------------------+",
+            "| active_longest_days(repo.datetime) |",
+            "+------------------------------------+",
+            "| 2                                  |",
+            "+------------------------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
     }
@@ -1238,28 +1161,6 @@ mod tests {
             "+-----------------------------------+",
             "| 2021-10-13                        |",
             "+-----------------------------------+",
-        ];
-        datafusion::assert_batches_sorted_eq!(expected, &result);
-    }
-
-    #[tokio::test]
-    async fn test_udaf_distinct() {
-        let mut ctx = get_datetime_context();
-        let result: Vec<RecordBatch> = ctx
-            .sql("select distinct(repo_name) as repo_name from repo;")
-            .await
-            .unwrap()
-            .collect()
-            .await
-            .unwrap();
-
-        let expected = vec![
-            "+--------------------+",
-            "| repo_name          |",
-            "+--------------------+",
-            "| chenjiandongx/gitv |",
-            "| rust-lang/rust     |",
-            "+--------------------+",
         ];
         datafusion::assert_batches_sorted_eq!(expected, &result);
     }

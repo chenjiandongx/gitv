@@ -309,14 +309,31 @@ struct Chart {
     options: Value,
 }
 
-static KEY_LABELS: &str = "labels";
-static KEY_DATASETS: &str = "datasets";
-static KET_DATA: &str = "data";
-static KEY_COLORS: &str = "backgroundColor";
-static KEY_PLUGINS: &str = "plugins";
-static KEY_DATALABELS: &str = "datalabels";
-static KEY_FORMATTER: &str = "formatter";
-static VALUE_RANDOM: &str = "random";
+enum KeyType {
+    Labels,
+    DataSets,
+    Data,
+    Colors,
+    Plugins,
+    DataLabels,
+    Formatter,
+    Random,
+}
+
+impl KeyType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            KeyType::Labels => "labels",
+            KeyType::DataSets => "datasets",
+            KeyType::Data => "data",
+            KeyType::Colors => "backgroundColor",
+            KeyType::Plugins => "plugins",
+            KeyType::DataLabels => "datalabels",
+            KeyType::Formatter => "formatter",
+            KeyType::Random => "random",
+        }
+    }
+}
 
 static TEMPLATE_CHART: &str = include_str!("../static/chart.tpl");
 static CONTENT_COLORS: &str = include_str!("../static/colors.yaml");
@@ -427,7 +444,7 @@ impl ChartRender {
     fn hanlde_options_section(&mut self, mappings: &mut Mapping) {
         for (key, val) in mappings {
             let key = key.as_str().unwrap_or_default();
-            if key == KEY_PLUGINS {
+            if key == KeyType::Plugins.as_str() {
                 let plugins = val.as_mapping_mut();
                 if plugins.is_none() {
                     continue;
@@ -435,7 +452,7 @@ impl ChartRender {
 
                 for (pk, pv) in plugins.unwrap() {
                     let pk = pk.as_str().unwrap_or_default();
-                    if pk == KEY_DATALABELS {
+                    if pk == KeyType::DataLabels.as_str() {
                         let datalabels = pv.as_mapping_mut();
                         if datalabels.is_none() {
                             continue;
@@ -450,7 +467,7 @@ impl ChartRender {
     fn handle_datalabels_field(&mut self, mappings: &mut Mapping) -> Option<()> {
         for (key, val) in mappings {
             let key = key.as_str().unwrap_or_default();
-            if key == KEY_FORMATTER {
+            if key == KeyType::Formatter.as_str() {
                 let var = self.parse_variable(val.as_str().unwrap_or_default())?;
                 if let Some(f) = FUNCTIONS.get(&var.1) {
                     *val = f.clone();
@@ -463,10 +480,10 @@ impl ChartRender {
     fn hanlde_data_section(&mut self, mappings: &mut Mapping, cms: &[ColumnMap]) {
         for (key, val) in mappings {
             let key = key.as_str().unwrap_or_default();
-            if key == KEY_LABELS {
+            if key == KeyType::Labels.as_str() {
                 self.handle_labels_field(val, cms);
             }
-            if key == KEY_DATASETS {
+            if key == KeyType::DataSets.as_str() {
                 self.handle_datasets_field(val, cms);
             }
         }
@@ -506,7 +523,7 @@ impl ChartRender {
 
             for (dk, dv) in dataset.unwrap() {
                 let dk = dk.as_str().unwrap_or_default();
-                if dk == KET_DATA {
+                if dk == KeyType::Data.as_str() {
                     if !dv.is_sequence() {
                         continue;
                     };
@@ -530,7 +547,7 @@ impl ChartRender {
                     *dv = Value::Sequence(items);
                 }
 
-                if dk == KEY_COLORS {
+                if dk == KeyType::Colors.as_str() {
                     if let Some(v) = self.handle_colors_field(dv) {
                         *dv = Value::Sequence(v.to_vec());
                     }
@@ -542,7 +559,7 @@ impl ChartRender {
 
     fn handle_colors_field(&mut self, val: &mut Value) -> Option<&[Value]> {
         let var = self.parse_variable(val.as_str().unwrap_or_default())?;
-        if var.1 == VALUE_RANDOM {
+        if var.1 == KeyType::Random.as_str() {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
             let k = COLORS.keys().nth(n % COLORS.len())?;

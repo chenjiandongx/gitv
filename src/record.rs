@@ -5,7 +5,7 @@ use chrono::DateTime;
 use serde::Serialize;
 use std::{
     fs::File,
-    path::{Path, PathBuf},
+    path::Path,
     process::exit,
     sync::{Arc, Mutex},
 };
@@ -184,7 +184,11 @@ impl CsvSerializer {
         Ok(())
     }
 
-    async fn write_records(database: Database, author_mappings: Vec<AuthorMapping>) -> Result<()> {
+    async fn serialize_records(
+        database: Database,
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<()> {
+        const BUFFER_SIZE: usize = 1000;
         let repos = database.load()?;
         let total = repos.len();
 
@@ -239,30 +243,41 @@ impl CsvSerializer {
             handles.push(handle)
         }
 
-        const BUFFER_SIZE: usize = 1000;
         const FLUSH_SIZE: usize = 500;
 
         let rev = tokio::spawn(async move {
-            let mut commit_wtr = CsvWriter::try_new(
-                Path::new(&database.dir).join(format!("{}.csv", RecordCommit::name())),
-                FLUSH_SIZE,
-            )
-            .unwrap();
-            let mut change_wtr = CsvWriter::try_new(
-                Path::new(&database.dir).join(format!("{}.csv", RecordChange::name())),
-                FLUSH_SIZE,
-            )
-            .unwrap();
-            let mut tag_wtr = CsvWriter::try_new(
-                Path::new(&database.dir).join(format!("{}.csv", RecordTag::name())),
-                FLUSH_SIZE,
-            )
-            .unwrap();
-            let mut snapshot_wtr = CsvWriter::try_new(
-                Path::new(&database.dir).join(format!("{}.csv", RecordSnapshot::name())),
-                FLUSH_SIZE,
-            )
-            .unwrap();
+            let mut commit_wtr =
+                match CsvWriter::try_new(&database.dir, RecordCommit::name(), FLUSH_SIZE) {
+                    Ok(wtr) => wtr,
+                    Err(e) => {
+                        println!("Failed to create commit writer, error: {}", e);
+                        exit(1)
+                    }
+                };
+            let mut change_wtr =
+                match CsvWriter::try_new(&database.dir, RecordChange::name(), FLUSH_SIZE) {
+                    Ok(wtr) => wtr,
+                    Err(e) => {
+                        println!("Failed to create change writer, error: {}", e);
+                        exit(1)
+                    }
+                };
+            let mut tag_wtr = match CsvWriter::try_new(&database.dir, RecordTag::name(), FLUSH_SIZE)
+            {
+                Ok(wtr) => wtr,
+                Err(e) => {
+                    println!("Failed to create tag writer, error: {}", e);
+                    exit(1)
+                }
+            };
+            let mut snapshot_wtr =
+                match CsvWriter::try_new(&database.dir, RecordSnapshot::name(), FLUSH_SIZE) {
+                    Ok(wtr) => wtr,
+                    Err(e) => {
+                        println!("Failed to create snapshot writer, error: {}", e);
+                        exit(1)
+                    }
+                };
 
             while let Some(record) = rx.recv().await {
                 match record {
@@ -316,9 +331,9 @@ struct CsvWriter {
 }
 
 impl CsvWriter {
-    fn try_new(p: PathBuf, size: usize) -> Result<Self> {
+    fn try_new(dir: &str, name: String, size: usize) -> Result<Self> {
         Ok(Self {
-            wtr: csv::Writer::from_path(p)?,
+            wtr: csv::Writer::from_path(Path::new(dir).join(format!("{}.csv", name)))?,
             size,
             curr: 0,
         })
@@ -328,7 +343,8 @@ impl CsvWriter {
         self.curr += 1;
         self.wtr.serialize(record)?;
         if self.curr >= self.size {
-            self.wtr.flush()?
+            self.wtr.flush()?;
+            self.curr = 0;
         }
         Ok(())
     }
@@ -347,7 +363,8 @@ impl RecordSerializer for CsvSerializer {
             let author_mappings = config.author_mappings.clone();
 
             let handle = tokio::spawn(async move {
-                let r = Self::write_records(database, author_mappings.unwrap_or_default()).await;
+                let r =
+                    Self::serialize_records(database, author_mappings.unwrap_or_default()).await;
                 if let Err(e) = r {
                     println!("Failed to persist records, error: {}", e);
                     exit(1)

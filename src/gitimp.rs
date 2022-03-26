@@ -399,6 +399,7 @@ impl GitImpl {
             let mutex = mutex.clone();
             let repo = repo.clone();
             let author_mappings = author_mappings.clone();
+
             let handle = tokio::spawn(async move {
                 let lines = if since.is_empty() && before.is_empty() {
                     Git::git_log(

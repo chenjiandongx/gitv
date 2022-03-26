@@ -125,8 +125,7 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        let commits = GitImpl::commits(&repo, author_mappings).await?;
-        for commit in commits {
+        for commit in GitImpl::commits(&repo, author_mappings).await? {
             let record = RecordCommit {
                 repo_name: repo.name.clone(),
                 branch: repo.branch.clone().unwrap_or_default(),
@@ -164,8 +163,7 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        let tags = GitImpl::tags(&repo, author_mappings).await?;
-        for tag in tags {
+        for tag in GitImpl::tags(&repo, author_mappings).await? {
             let record = RecordTag {
                 repo_name: repo.name.clone(),
                 datetime: datetime_rfc339(&tag.datetime),
@@ -277,15 +275,12 @@ impl CsvSerializer {
         const FLUSH_SIZE: usize = 500;
 
         let rev = tokio::spawn(async move {
-            let mut commit_wtr =
-                CsvWriter::must_new(&database.dir, RecordCommit::name(), FLUSH_SIZE);
-            let mut change_wtr =
-                CsvWriter::must_new(&database.dir, RecordChange::name(), FLUSH_SIZE);
-            let mut tag_wtr = CsvWriter::must_new(&database.dir, RecordTag::name(), FLUSH_SIZE);
-            let mut snapshot_wtr =
-                CsvWriter::must_new(&database.dir, RecordSnapshot::name(), FLUSH_SIZE);
-            let mut active_wtr =
-                CsvWriter::must_new(&database.dir, RecordActive::name(), FLUSH_SIZE);
+            let dir = &database.dir;
+            let mut commit_wtr = CsvWriter::must_new(dir, RecordCommit::name(), FLUSH_SIZE);
+            let mut change_wtr = CsvWriter::must_new(dir, RecordChange::name(), FLUSH_SIZE);
+            let mut tag_wtr = CsvWriter::must_new(dir, RecordTag::name(), FLUSH_SIZE);
+            let mut snapshot_wtr = CsvWriter::must_new(dir, RecordSnapshot::name(), FLUSH_SIZE);
+            let mut active_wtr = CsvWriter::must_new(dir, RecordActive::name(), FLUSH_SIZE);
 
             while let Some(record) = rx.recv().await {
                 match record {
@@ -358,12 +353,10 @@ impl RecordSerializer for CsvSerializer {
         let mut handles = vec![];
         for database in config.databases {
             let database = database.clone();
-            let author_mappings = config.author_mappings.clone();
+            let author_mappings = config.author_mappings.clone().unwrap_or_default();
 
             let handle = tokio::spawn(async move {
-                let r =
-                    Self::serialize_records(database, author_mappings.unwrap_or_default()).await;
-                if let Err(e) = r {
+                if let Err(e) = Self::serialize_records(database, author_mappings).await {
                     println!("Failed to persist records, error: {}", e);
                     exit(1)
                 }

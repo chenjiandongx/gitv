@@ -58,31 +58,34 @@ impl RepoFetcher {
             let handle = tokio::spawn(async move {
                 let repos = match config {
                     GithubConfig::Authenticated(ref config) => {
-                        match GithubRepoFetcher::authenticated_repos(&config).await {
+                        let repos = match GithubRepoFetcher::authenticated_repos(&config).await {
                             Err(e) => {
                                 println!("Fetch github authenticated repos error: {}", e);
                                 exit(1)
                             }
                             Ok(repos) => repos,
                         };
+                        repos
                     }
                     GithubConfig::User(ref config) => {
-                        match GithubRepoFetcher::user_repos(&config).await {
+                        let repos = match GithubRepoFetcher::user_repos(&config).await {
                             Err(e) => {
                                 println!("Fetch github user repos error: {}", e);
                                 exit(1)
                             }
                             Ok(repos) => repos,
                         };
+                        repos
                     }
                     GithubConfig::Org(ref config) => {
-                        match GithubRepoFetcher::org_repos(&config).await {
+                        let repos = match GithubRepoFetcher::org_repos(&config).await {
                             Err(e) => {
                                 println!("Fetch github user repos error: {}", e);
                                 exit(1)
                             }
                             Ok(repos) => repos,
                         };
+                        repos
                     }
                 };
 
@@ -168,15 +171,6 @@ impl GithubRepoFetcher {
         false
     }
 
-    fn exclude_filter(
-        exclude_orgs: &[String],
-        exclude_repos: &[String],
-        repo: &Repository,
-    ) -> bool {
-        Self::exclude_orgs_filter(exclude_orgs, repo)
-            || Self::exclude_repos_filter(exclude_repos, repo)
-    }
-
     async fn authenticated_repos(config: &config::GithubAuthenticated) -> Result<Vec<Repository>> {
         let visibility = config.visibility.clone();
         let affiliation = config.affiliation.clone();
@@ -190,11 +184,11 @@ impl GithubRepoFetcher {
             .await?
             .iter()
             .filter(|repo| {
-                Self::exclude_filter(
-                    &config.clone().exclude_orgs.unwrap_or_default(),
-                    &config.clone().exclude_repos.unwrap_or_default(),
-                    repo,
-                )
+                !(Self::exclude_orgs_filter(&config.clone().exclude_orgs.unwrap_or_default(), repo)
+                    || Self::exclude_repos_filter(
+                        &config.clone().exclude_repos.unwrap_or_default(),
+                        repo,
+                    ))
             })
             .map(|x| x.clone())
             .collect::<Vec<_>>();
@@ -215,7 +209,7 @@ impl GithubRepoFetcher {
         .await?
         .iter()
         .filter(|repo| {
-            Self::exclude_repos_filter(&config.clone().exclude_repos.unwrap_or_default(), repo)
+            !Self::exclude_repos_filter(&config.clone().exclude_repos.unwrap_or_default(), repo)
         })
         .map(|x| x.clone())
         .collect::<Vec<_>>();
@@ -236,7 +230,7 @@ impl GithubRepoFetcher {
         .await?
         .iter()
         .filter(|repo| {
-            Self::exclude_repos_filter(&config.clone().exclude_repos.unwrap_or_default(), repo)
+            !Self::exclude_repos_filter(&config.clone().exclude_repos.unwrap_or_default(), repo)
         })
         .map(|x| x.clone())
         .collect::<Vec<_>>();
@@ -277,7 +271,6 @@ impl GithubRepoFetcher {
             }
 
             for repo in response {
-                println!("{:#?}", repo);
                 let name = repo.full_name;
                 repos.push(Repository {
                     name: name.clone(),

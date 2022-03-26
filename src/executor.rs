@@ -1,5 +1,4 @@
-use crate::config;
-use crate::record;
+use crate::{config, record};
 use chrono::{prelude::*, Duration};
 use datafusion::{
     arrow::{
@@ -59,22 +58,47 @@ impl Executor {
         }
 
         for c in config {
-            let mut p = Path::new(&c.dir).join(record::RecordCommit::name());
-            p.set_extension("csv");
-            if p.exists() {
-                ctx.register_csv(
-                    format!("{}.{}", &c.db_name, record::RecordCommit::name()).as_str(),
-                    p.to_str().unwrap(),
-                    CsvReadOptions::new(),
-                )
-                .await?;
-            }
+            Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordCommit::name()).await?;
+            Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordChange::name()).await?;
+            Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordTag::name()).await?;
+            Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordSnapshot::name()).await?;
         }
         Ok(ctx)
     }
+
+    async fn register(
+        ctx: &mut ExecutionContext,
+        dir: &str,
+        db_name: &str,
+        name: String,
+    ) -> Result<()> {
+        let mut p = Path::new(dir).join(&name);
+        p.set_extension("csv");
+        if p.exists() {
+            ctx.register_csv(
+                format!("{}.{}", db_name, name).as_str(),
+                p.to_str().unwrap(),
+                CsvReadOptions::new(),
+            )
+            .await?;
+        }
+        Ok(())
+    }
 }
 
-const ERROR_DATEDATE_MISMATCHED: &str = "Mismatched: except rfc3339 datetime string";
+enum ExecutionErr {
+    DateTimeMismatch,
+}
+
+impl ExecutionErr {
+    fn err(&self) -> DataFusionError {
+        match self {
+            ExecutionErr::DateTimeMismatch => DataFusionError::Execution(String::from(
+                "Mismatched: except rfc3339 datetime string",
+            )),
+        }
+    }
+}
 
 /// 计算给定时间的年份
 ///
@@ -87,9 +111,7 @@ fn udf_year() -> ScalarUDF {
     let year = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         }
 
         let array = base
@@ -125,9 +147,7 @@ fn udf_month() -> ScalarUDF {
     let month = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         }
 
         let array = base
@@ -163,9 +183,7 @@ fn udf_weekday() -> ScalarUDF {
     let weekday = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base
@@ -201,9 +219,7 @@ fn udf_weeknum() -> ScalarUDF {
     let week = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base
@@ -239,9 +255,7 @@ fn udf_dateday() -> ScalarUDF {
     let dateday = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base
@@ -277,9 +291,7 @@ fn udf_hour() -> ScalarUDF {
     let hour = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base
@@ -318,9 +330,7 @@ fn udf_period() -> ScalarUDF {
     let period = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base
@@ -365,9 +375,7 @@ fn udf_timestamp() -> ScalarUDF {
     let timestamp = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base
@@ -403,9 +411,7 @@ fn udf_timezone() -> ScalarUDF {
     let timezone = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::StringArray>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         }
 
         let array = base
@@ -441,9 +447,7 @@ fn udf_duration() -> ScalarUDF {
     let duration = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::Int64Array>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base
@@ -479,9 +483,7 @@ fn udf_timestamp_rfc3339() -> ScalarUDF {
     let date = |args: &[array::ArrayRef]| {
         let base = &args[0].as_any().downcast_ref::<array::Int64Array>();
         if base.is_none() {
-            return Err(DataFusionError::Execution(String::from(
-                ERROR_DATEDATE_MISMATCHED,
-            )));
+            return Err(ExecutionErr::DateTimeMismatch.err());
         };
 
         let array = base

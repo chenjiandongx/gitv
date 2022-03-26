@@ -247,71 +247,26 @@ impl CsvSerializer {
 
         let rev = tokio::spawn(async move {
             let mut commit_wtr =
-                match CsvWriter::try_new(&database.dir, RecordCommit::name(), FLUSH_SIZE) {
-                    Ok(wtr) => wtr,
-                    Err(e) => {
-                        println!("Failed to create commit writer, error: {}", e);
-                        exit(1)
-                    }
-                };
+                CsvWriter::try_new(&database.dir, RecordCommit::name(), FLUSH_SIZE);
             let mut change_wtr =
-                match CsvWriter::try_new(&database.dir, RecordChange::name(), FLUSH_SIZE) {
-                    Ok(wtr) => wtr,
-                    Err(e) => {
-                        println!("Failed to create change writer, error: {}", e);
-                        exit(1)
-                    }
-                };
-            let mut tag_wtr = match CsvWriter::try_new(&database.dir, RecordTag::name(), FLUSH_SIZE)
-            {
-                Ok(wtr) => wtr,
-                Err(e) => {
-                    println!("Failed to create tag writer, error: {}", e);
-                    exit(1)
-                }
-            };
+                CsvWriter::try_new(&database.dir, RecordChange::name(), FLUSH_SIZE);
+            let mut tag_wtr = CsvWriter::try_new(&database.dir, RecordTag::name(), FLUSH_SIZE);
             let mut snapshot_wtr =
-                match CsvWriter::try_new(&database.dir, RecordSnapshot::name(), FLUSH_SIZE) {
-                    Ok(wtr) => wtr,
-                    Err(e) => {
-                        println!("Failed to create snapshot writer, error: {}", e);
-                        exit(1)
-                    }
-                };
+                CsvWriter::try_new(&database.dir, RecordSnapshot::name(), FLUSH_SIZE);
 
             while let Some(record) = rx.recv().await {
                 match record {
-                    RecordType::Commit(_) => {
-                        if let Err(e) = commit_wtr.write(record) {
-                            println!("Failed to serialize commit record, error: {}", e);
-                            exit(1)
-                        }
-                    }
-                    RecordType::Change(_) => {
-                        if let Err(e) = change_wtr.write(record) {
-                            println!("Failed to serialize change record, error: {}", e);
-                            exit(1)
-                        }
-                    }
-                    RecordType::Tag(_) => {
-                        if let Err(e) = tag_wtr.write(record) {
-                            println!("Failed to serialize tag record, error: {}", e);
-                            exit(1)
-                        }
-                    }
-                    RecordType::Snapshot(_) => {
-                        if let Err(e) = snapshot_wtr.write(record) {
-                            println!("Failed to serialize snapshot record, error: {}", e);
-                            exit(1)
-                        }
-                    }
+                    RecordType::Commit(_) => commit_wtr.write(record),
+                    RecordType::Change(_) => change_wtr.write(record),
+                    RecordType::Tag(_) => tag_wtr.write(record),
+                    RecordType::Snapshot(_) => snapshot_wtr.write(record),
                 }
             }
 
-            commit_wtr.flush().unwrap();
-            change_wtr.flush().unwrap();
-            tag_wtr.flush().unwrap();
-            snapshot_wtr.flush().unwrap();
+            commit_wtr.flush();
+            change_wtr.flush();
+            tag_wtr.flush();
+            snapshot_wtr.flush();
         });
 
         for handle in handles {
@@ -331,26 +286,34 @@ struct CsvWriter {
 }
 
 impl CsvWriter {
-    fn try_new(dir: &str, name: String, size: usize) -> Result<Self> {
-        Ok(Self {
-            wtr: csv::Writer::from_path(Path::new(dir).join(format!("{}.csv", name)))?,
-            size,
-            curr: 0,
-        })
+    fn try_new(dir: &str, name: String, size: usize) -> Self {
+        let wtr = match csv::Writer::from_path(Path::new(dir).join(format!("{}.csv", name))) {
+            Ok(wtr) => wtr,
+            Err(e) => {
+                println!("Failed to create {} writer, error: {}", name, e);
+                exit(1)
+            }
+        };
+        Self { wtr, size, curr: 0 }
     }
 
-    fn write<T: Serialize>(&mut self, record: T) -> csv::Result<()> {
+    fn write<T: Serialize>(&mut self, record: T) {
         self.curr += 1;
-        self.wtr.serialize(record)?;
+        if let Err(e) = self.wtr.serialize(record) {
+            println!("Failed to serialize record, error: {}", e);
+            exit(1)
+        }
         if self.curr >= self.size {
-            self.wtr.flush()?;
+            self.flush();
             self.curr = 0;
         }
-        Ok(())
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.wtr.flush()
+    fn flush(&mut self) {
+        if let Err(e) = self.wtr.flush() {
+            println!("Failed to flush record, error: {}", e);
+            exit(1)
+        }
     }
 }
 

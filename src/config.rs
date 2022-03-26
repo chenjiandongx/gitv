@@ -67,13 +67,16 @@ impl Database {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FetchAction {
-    pub github: Option<Vec<Github>>,
+    pub github_authenticated: Option<Vec<GithubAuthenticated>>,
+    pub github_user: Option<Vec<GithubUser>>,
+    pub github_org: Option<Vec<GithubOrg>>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Github {
+pub struct GithubAuthenticated {
     pub clone_dir: String,
     pub destination: String,
     pub token: String,
@@ -81,6 +84,30 @@ pub struct Github {
     pub exclude_repos: Option<Vec<String>>,
     pub visibility: Option<String>,
     pub affiliation: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubUser {
+    pub clone_dir: String,
+    pub destination: String,
+    pub token: String,
+    pub username: String,
+    pub exclude_repos: Option<Vec<String>>,
+    #[serde(rename(serialize = "type", deserialize = "type"))]
+    pub typ: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubOrg {
+    pub clone_dir: String,
+    pub destination: String,
+    pub token: String,
+    pub org: String,
+    pub exclude_repos: Option<Vec<String>>,
+    #[serde(rename(serialize = "type", deserialize = "type"))]
+    pub typ: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

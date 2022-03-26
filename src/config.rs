@@ -41,7 +41,7 @@ impl Author {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Database {
-    pub path: String,
+    pub dir: String,
     pub files: Option<Vec<String>>,
     pub repos: Option<Vec<Repository>>,
 }
@@ -89,8 +89,8 @@ pub struct ShellAction {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Execution {
-    pub table_name: String,
-    pub file: String,
+    pub db_name: String,
+    pub dir: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

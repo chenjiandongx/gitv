@@ -18,7 +18,6 @@ use std::{
 };
 use tera::{Context, Tera};
 use tokio::time;
-use tracing::info;
 
 #[derive(Debug, Serialize)]
 pub struct ColumnMap {
@@ -290,7 +289,7 @@ impl ResultRender for ChartRender {
                 Path::new(&self.config.display.destination).join(chart_config.name.clone());
             dest.set_extension("html");
             self.render_chart(chart_config, &cms, &dest).await?;
-            info!(
+            println!(
                 "[{}/{}] render file '{}' => elapsed {:#?}",
                 index + 1,
                 total,
@@ -547,7 +546,7 @@ impl ChartRender {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
             let k = COLORS.keys().nth(n % COLORS.len())?;
-            info!("[render]: random colors select '{}'", k);
+            println!("[render]: random colors select '{}'", k);
             return Some(COLORS.get(k)?);
         }
         Some(COLORS.get(&var.1)?)

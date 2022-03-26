@@ -1,12 +1,12 @@
 [package]
-name = "gitv"
-version = "0.1.0"
-edition = "2021"
 authors = ["chenjiandongx <chenjiandongx@qq.com>"]
+edition = "2021"
 homepage = "https://github.com/chenjiandongx/gitv"
-repository = "https://github.com/chenjiandongx/gitv"
 license = "MIT/Apache-2.0"
+name = "gitv"
 readme = "README.md"
+repository = "https://github.com/chenjiandongx/gitv"
+version = "0.1.0"
 
 [[bin]]
 name = "gitv"
@@ -14,24 +14,22 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
-regex = "1"
-lazy_static = "1"
-csv = "1.1"
-serde = { version = "1", features = ["derive"] }
-datafusion = "7"
-tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync", "parking_lot"] }
-serde_yaml = "0.8"
-async-trait = "0.1"
 async-process = "1"
+async-trait = "0.1"
 chrono = "0.4"
-serde_json = "1.0"
-reqwest = { version = "0.11", features = ["json"] }
-humantime = "2"
-clap = { version = "3.1.5", features = ["derive"] }
-tracing = "0.1.31"
-tracing-appender = "0.2.1"
-tracing-subscriber = { version = "0.3.9" }
-rustyline = { version = "9" }
+clap = {version = "3.1.5", features = ["derive"]}
+csv = "1.1"
+datafusion = "7"
 dirs = "4.0"
-tera="1"
+humantime = "2"
+lazy_static = "1"
 rand = "0.8"
+regex = "1"
+reqwest = {version = "0.11", features = ["json"]}
+rustyline = "9"
+serde = {version = "1", features = ["derive"]}
+serde_json = "1.0"
+serde_yaml = "0.8"
+tera = "1"
+tokei = "12"
+tokio = {version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync"]}

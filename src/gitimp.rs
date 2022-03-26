@@ -1,7 +1,6 @@
 use crate::{config::AuthorMapping, Author, Repository};
 use anyhow::{anyhow, Result};
 use async_process::Command;
-use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use lazy_static::lazy_static;
 use std::{
@@ -12,18 +11,7 @@ use std::{
     sync::{Arc, Mutex},
     time,
 };
-use tracing::{error, info};
-
-/// 文件变更记录
-#[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
-pub struct FileExtChange {
-    /// 文件扩展名
-    pub ext: String,
-    /// 文件改动增加行数
-    pub insertion: i64,
-    /// 文件改动删除函数
-    pub deletion: i64,
-}
+use tokei::{Config, Languages};
 
 /// 提交记录
 #[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
@@ -42,45 +30,57 @@ pub struct Commit {
     pub changes: Vec<FileExtChange>,
 }
 
+impl Commit {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+/// 文件变更记录
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
+pub struct FileExtChange {
+    /// 文件扩展名
+    pub ext: String,
+    /// 文件改动增加行数
+    pub insertion: usize,
+    /// 文件改动删除函数
+    pub deletion: usize,
+}
+
+impl FileExtChange {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+/// Tags 数据
+#[derive(Debug, Clone, Default)]
+pub struct Tag {
+    /// 版本号
+    pub tag: String,
+    /// 提交时间
+    pub datetime: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Snapshot {
+    /// 提交时间
+    pub datetime: String,
+    /// 文件统计数据
+    pub stats: Vec<FileExtStat>,
+}
+
 /// 文件统计
 #[derive(Debug, Clone, Default)]
 pub struct FileExtStat {
     /// 文件扩展名
     pub ext: String,
-    /// 文件体积大小
-    pub size: i64,
-    /// 文件数量
-    pub files: i64,
-}
-
-/// Tags 统计数据
-#[derive(Debug, Clone, Default)]
-pub struct TagStat {
-    /// Tag hash
-    pub hash: String,
-    /// 版本号
-    pub tag: String,
-    /// 提交时间
-    pub datetime: String,
-    /// 文件统计
-    pub stats: Vec<FileExtStat>,
-}
-
-/// Gitter 定义了 `git` 实现接口
-#[async_trait]
-pub trait Gitter: Send + Sync {
-    async fn clone_or_pull(&self, repos: Vec<Repository>) -> Result<()>;
-    async fn checkout(&self, repo: &Repository) -> Result<()>;
-    async fn commits(
-        &self,
-        repo: &Repository,
-        author_mappings: Vec<AuthorMapping>,
-    ) -> Result<Vec<Commit>>;
-    async fn tags(
-        &self,
-        repo: &Repository,
-        author_mappings: Vec<AuthorMapping>,
-    ) -> Result<Vec<TagStat>>;
+    /// 文件代码行数
+    pub code: usize,
+    /// 文件注释行数
+    pub comments: usize,
+    /// 文件空格行数
+    pub blanks: usize,
 }
 
 lazy_static! {
@@ -91,9 +91,9 @@ lazy_static! {
 }
 
 /// `git` 可执行文件抽象，使用本地的 `git` 命令
-struct GitExecutable;
+struct Git;
 
-impl GitExecutable {
+impl Git {
     async fn git(
         repo: &Repository,
         command: &str,
@@ -134,14 +134,8 @@ impl GitExecutable {
         Ok(())
     }
 
-    async fn git_pull(repo: &Repository) -> Result<()> {
-        let args = vec![];
-        let lines = Self::git(repo, "pull", &args, '\n').await;
-        if lines.is_err() {
-            Err(lines.err().unwrap())
-        } else {
-            Ok(())
-        }
+    async fn git_pull(repo: &Repository) -> Result<Vec<String>> {
+        Self::git(repo, "pull", &vec![], '\n').await
     }
 
     async fn git_log(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
@@ -150,10 +144,6 @@ impl GitExecutable {
 
     async fn git_show_ref(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
         Self::git(repo, "show-ref", args, '\n').await
-    }
-
-    async fn git_ls_tree(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
-        Self::git(repo, "ls-tree", args, '\u{0}').await
     }
 
     async fn git_rev_list(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
@@ -206,7 +196,7 @@ impl Parser {
 
         for line in lines.iter() {
             count += 1;
-            let mut change = FileExtChange::default();
+            let mut change = FileExtChange::new();
             let caps = COMMIT_CHANGE_REGEXP.captures(line.as_str());
             if caps.is_none() {
                 return Err(anyhow!("Invalid change format: {}", line));
@@ -216,8 +206,8 @@ impl Parser {
             for i in 0..caps.len() {
                 let cap = caps.get(i).unwrap().as_str();
                 match i {
-                    1 => change.insertion = cap.parse::<i64>().unwrap_or(0),
-                    2 => change.deletion = cap.parse::<i64>().unwrap_or(0),
+                    1 => change.insertion = cap.parse::<usize>().unwrap_or_default(),
+                    2 => change.deletion = cap.parse::<usize>().unwrap_or_default(),
                     3 => {
                         let p = Path::new(cap);
                         if p.extension().is_some() {
@@ -252,61 +242,23 @@ impl Parser {
     }
 
     fn parse_commit(lines: &[String], author_mappings: Vec<AuthorMapping>) -> Result<Commit> {
-        let mut commit = Commit::default();
+        let mut commit = Commit::new();
         Self::parse_commit_info(&mut commit, &lines[0], author_mappings)?;
         Self::parse_commit_changes(&mut commit, &lines[1..])?;
         Ok(commit)
     }
-
-    fn parse_file_ext_stats(lines: &[String]) -> Result<Vec<FileExtStat>> {
-        let mut stats: HashMap<String, FileExtStat> = HashMap::new();
-
-        for line in lines {
-            let fields: Vec<&str> = line.split_ascii_whitespace().collect();
-            if fields.len() < 5 {
-                continue;
-            }
-            // 忽略 submodules
-            if fields[0] == "106000" {
-                continue;
-            }
-
-            let n = fields[3].parse::<i64>().unwrap_or(0);
-            let p = Path::new(fields[4]);
-            if p.extension().is_none() {
-                continue;
-            }
-            let ext = p.extension().unwrap().to_str().unwrap().to_string();
-            let s = stats
-                .entry(ext.clone())
-                .or_insert_with(FileExtStat::default);
-            s.size += n;
-            s.files += 1;
-        }
-
-        let mut data = vec![];
-        for (k, v) in stats {
-            data.push(FileExtStat {
-                ext: k,
-                size: v.size,
-                files: v.files,
-            })
-        }
-        Ok(data)
-    }
 }
 
-/// Gitter 的 Binary 实现
 #[derive(Copy, Clone)]
-pub struct BinaryGitter;
+pub struct GitImpl;
 
-impl BinaryGitter {
-    async fn range_commits(&self, repo: &Repository) -> Result<Vec<(String, String)>> {
-        let lines = GitExecutable::git_rev_list(repo, &["--max-parents=0", "HEAD"]).await?;
+impl GitImpl {
+    async fn range_commits(repo: &Repository) -> Result<Vec<(String, String)>> {
+        let lines = Git::git_rev_list(repo, &["--max-parents=0", "HEAD"]).await?;
         if lines.is_empty() {
             return Err(anyhow!("Empty git-rev-list output"));
         }
-        let lines = GitExecutable::git_log(
+        let lines = Git::git_log(
             repo,
             &[
                 "--date=rfc",
@@ -318,11 +270,10 @@ impl BinaryGitter {
         if lines.is_empty() {
             return Err(anyhow!("Failed to get first commit detailed"));
         }
-
-        let mut first_commit = Commit::default();
+        let mut first_commit = Commit::new();
         Parser::parse_commit_info(&mut first_commit, &lines[0], vec![])?;
 
-        let lines = GitExecutable::git_log(
+        let lines = Git::git_log(
             repo,
             &[
                 "--date=rfc",
@@ -331,18 +282,17 @@ impl BinaryGitter {
             ],
         )
         .await?;
-
         if lines.is_empty() {
             return Err(anyhow!("Failed to get last commit detailed"));
         }
-        let mut last_commit = Commit::default();
+        let mut last_commit = Commit::new();
         Parser::parse_commit_info(&mut last_commit, &lines[0], vec![])?;
 
         let first_ts = DateTime::parse_from_rfc2822(&first_commit.datetime)?.timestamp();
         let last_ts = DateTime::parse_from_rfc2822(&last_commit.datetime)?.timestamp();
 
         const DURATION: i64 = 3600 * 24 * 120; // 120days
-        let data = self.calc_range(DURATION, first_ts, last_ts);
+        let data = Self::calc_range(DURATION, first_ts, last_ts);
 
         if data.len() == 1 {
             let first = &data[0];
@@ -353,7 +303,7 @@ impl BinaryGitter {
         Ok(data)
     }
 
-    fn calc_range(&self, duration: i64, mut start: i64, end: i64) -> Vec<(String, String)> {
+    fn calc_range(duration: i64, mut start: i64, end: i64) -> Vec<(String, String)> {
         let format = "%Y-%m-%d";
         let mut data: Vec<(String, String)> = vec![];
         while start + duration <= end {
@@ -374,9 +324,8 @@ impl BinaryGitter {
     }
 }
 
-#[async_trait]
-impl Gitter for BinaryGitter {
-    async fn clone_or_pull(&self, repos: Vec<Repository>) -> Result<()> {
+impl GitImpl {
+    pub async fn clone_or_pull(repos: Vec<Repository>) -> Result<()> {
         let mut handles = vec![];
         let mutex = Arc::new(Mutex::new(0));
         let total = repos.len();
@@ -388,15 +337,15 @@ impl Gitter for BinaryGitter {
             let handle = tokio::spawn(async move {
                 let now = time::Instant::now();
                 if Path::new(&repo.path).exists() {
-                    if let Err(e) = GitExecutable::git_pull(&repo).await {
-                        error!("Failed to execute git pull command, error: {}", e);
+                    if let Err(e) = Git::git_pull(&repo).await {
+                        println!("Failed to execute git pull command, error: {}", e);
                         exit(1)
                     };
 
                     let mut lock = mutex.lock().unwrap();
                     *lock += 1;
                     let n = *lock;
-                    info!(
+                    println!(
                         "[{}/{}] git pull '{}' => elapsed {:#?}",
                         n,
                         total,
@@ -404,15 +353,15 @@ impl Gitter for BinaryGitter {
                         now.elapsed(),
                     )
                 } else {
-                    if let Err(e) = GitExecutable::git_clone(&repo).await {
-                        error!("Failed to execute git clone command, error: {}", e);
+                    if let Err(e) = Git::git_clone(&repo).await {
+                        println!("Failed to execute git clone command, error: {}", e);
                         exit(1)
                     };
 
                     let mut lock = mutex.lock().unwrap();
                     *lock += 1;
                     let n = *lock;
-                    info!(
+                    println!(
                         "[{}/{}] git clone '{}' => elapsed {:#?}",
                         n,
                         total,
@@ -430,30 +379,29 @@ impl Gitter for BinaryGitter {
         Ok(())
     }
 
-    async fn checkout(&self, repo: &Repository) -> Result<()> {
+    pub async fn checkout(repo: &Repository) -> Result<()> {
         if repo.branch.is_some() {
             let branch = repo.branch.clone().unwrap();
             if !branch.is_empty() {
-                GitExecutable::git_checkout(repo, &[&branch]).await?;
+                Git::git_checkout(repo, &[&branch]).await?;
             }
         }
         Ok(())
     }
 
-    async fn commits(
-        &self,
+    pub async fn commits(
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<Vec<Commit>> {
         let mutex = Arc::new(Mutex::new(HashSet::new()));
         let mut handles = vec![];
-        for (since, before) in self.range_commits(repo).await? {
+        for (since, before) in Self::range_commits(repo).await? {
             let mutex = mutex.clone();
             let repo = repo.clone();
             let author_mappings = author_mappings.clone();
             let handle = tokio::spawn(async move {
                 let lines = if since.is_empty() && before.is_empty() {
-                    GitExecutable::git_log(
+                    Git::git_log(
                         &repo,
                         &[
                             "--no-merges",
@@ -465,7 +413,7 @@ impl Gitter for BinaryGitter {
                     )
                     .await
                 } else {
-                    GitExecutable::git_log(
+                    Git::git_log(
                         &repo,
                         &[
                             "--no-merges",
@@ -481,7 +429,7 @@ impl Gitter for BinaryGitter {
                 };
 
                 if let Err(e) = lines {
-                    error!("Failed to execute git log command, error: {}", e);
+                    println!("Failed to execute git log command, error: {}", e);
                     exit(1)
                 };
 
@@ -517,82 +465,81 @@ impl Gitter for BinaryGitter {
         Ok(data)
     }
 
-    async fn tags(
-        &self,
-        repo: &Repository,
-        author_mappings: Vec<AuthorMapping>,
-    ) -> Result<Vec<TagStat>> {
-        let mutex = Arc::new(tokio::sync::Mutex::new(vec![]));
-        let mut handles = vec![];
+    pub async fn snapshot(repo: &Repository) -> Result<Snapshot> {
+        let lines = Git::git_log(
+            &repo,
+            &[
+                "--no-merges",
+                "--date=rfc",
+                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                "HEAD",
+            ],
+        )
+        .await?;
 
-        let lines = GitExecutable::git_show_ref(repo, &["--tags"]).await?;
+        if lines.is_empty() {
+            return Err(anyhow!("Failed to get commit detailed"));
+        }
+
+        let mut commit = Commit::new();
+        Parser::parse_commit_info(&mut commit, &lines[0], vec![])?;
+
+        let mut languages = Languages::new();
+        languages.get_statistics(&[repo.path.clone()], &vec![], &Config::default());
+
+        let mut stats = vec![];
+        for (ty, language) in languages {
+            stats.push(FileExtStat {
+                ext: ty.to_string().to_lowercase(),
+                code: language.code,
+                comments: language.comments,
+                blanks: language.blanks,
+            });
+        }
+
+        Ok(Snapshot {
+            datetime: commit.datetime,
+            stats,
+        })
+    }
+
+    pub async fn tags(repo: &Repository, author_mappings: Vec<AuthorMapping>) -> Result<Vec<Tag>> {
+        let mut records = vec![];
+        let lines = Git::git_show_ref(repo, &["--tags"]).await?;
         for line in lines {
             let fields: Vec<String> = line.splitn(2, ' ').map(|x| x.to_string()).collect();
             if fields.len() < 2 {
                 continue;
             }
 
-            let lock = mutex.clone();
-            let repo = repo.clone();
-            let author_mappings = author_mappings.clone();
-            let handle = tokio::spawn(async move {
-                let (hash, tag) = (&fields[0], &fields[1]["refs/tags/".len()..]);
-                let lines = GitExecutable::git_ls_tree(&repo, &["-r", "-l", "-z", hash]).await;
-                let lines = match lines {
-                    Err(e) => {
-                        error!("Failed to execute git ls-tree command, error: {}", e);
-                        exit(1)
-                    }
-                    Ok(lines) => lines,
-                };
+            let hash = &fields[0];
+            let tag = &fields[1]["refs/tags/".len()..];
 
-                let file_ext_stats = match Parser::parse_file_ext_stats(&lines) {
-                    Err(e) => {
-                        error!("Failed to parse file ext stats, error: {}", e);
-                        exit(1)
-                    }
-                    Ok(lines) => lines,
-                };
+            let logs = Git::git_log(
+                &repo,
+                &[
+                    "--no-merges",
+                    "--date=rfc",
+                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                    "-n",
+                    "1",
+                    hash,
+                ],
+            )
+            .await?;
 
-                let log = GitExecutable::git_log(
-                    &repo,
-                    &[
-                        "--date=rfc",
-                        "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                        "--numstat",
-                        hash,
-                        "-1",
-                    ],
-                )
-                .await;
-                let log = match log {
-                    Err(e) => {
-                        error!("Failed to execute git log command, error: {}", e);
-                        exit(1)
-                    }
-                    Ok(log) => log,
-                };
+            if logs.is_empty() {
+                continue;
+            }
 
-                let mut tag_stats = TagStat {
-                    stats: file_ext_stats,
-                    ..Default::default()
-                };
-                if let Ok(commit) = Parser::parse_commit(&log[..], author_mappings) {
-                    tag_stats.tag = tag.to_string();
-                    tag_stats.hash = hash.to_string();
-                    tag_stats.datetime = commit.datetime;
-                }
-                let mut data = lock.lock().await;
-                data.push(tag_stats);
+            let commit = Parser::parse_commit(&logs, author_mappings.clone())?;
+            records.push(Tag {
+                tag: tag.to_string(),
+                datetime: commit.datetime,
             });
-            handles.push(handle)
         }
 
-        for handle in handles {
-            handle.await?;
-        }
-        let s = mutex.lock().await;
-        Ok(s.to_vec())
+        Ok(records)
     }
 }
 
@@ -630,21 +577,8 @@ mod tests {
         assert_eq!(5, commit.changes.len());
 
         let changes = commit.changes;
-        assert_eq!(0, changes.iter().map(|c| c.deletion).sum::<i64>());
-        assert_eq!(1588, changes.iter().map(|c| c.insertion).sum::<i64>());
-    }
-
-    #[test]
-    fn test_parse_file_ext_stats() {
-        let output = r#"100644 blob fc15aee1cb60737ea15ce83b88d0fac349f9d0ff   12827	ui.go"#;
-        let fes = Parser::parse_file_ext_stats(&vec![output.to_string()]);
-        let fes = fes.unwrap();
-        assert_eq!(1, fes.len());
-
-        let first = fes.first().unwrap();
-        assert_eq!("go", first.ext);
-        assert_eq!(1, first.files);
-        assert_eq!(12827, first.size);
+        assert_eq!(0, changes.iter().map(|c| c.deletion).sum::<usize>());
+        assert_eq!(1588, changes.iter().map(|c| c.insertion).sum::<usize>());
     }
 
     #[test]
@@ -653,8 +587,7 @@ mod tests {
         let start: i64 = 1647432000;
         let end: i64 = 1647432000 + (duration * 3) + 720;
 
-        let gitter = BinaryGitter;
-        let range = gitter.calc_range(duration, start, end);
+        let range = GitImpl::calc_range(duration, start, end);
         let excepted = vec![
             (String::from("2022-03-16"), String::from("2022-03-17")),
             (String::from("2022-03-17"), String::from("2022-03-18")),

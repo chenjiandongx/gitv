@@ -3,7 +3,6 @@ use anyhow::Result;
 use serde::Deserialize;
 use std::{fs::File, path::Path, process::exit};
 use tokio::time;
-use tracing::{error, info};
 
 /// 从不同数据源拉取 Repository 并写入本地磁盘
 ///
@@ -23,7 +22,7 @@ impl RepoFetcher {
 
     /// 拉取 Github 仓库数据源
     async fn fetch_github(&self) -> Result<()> {
-        info!("start to fetch github repos...");
+        println!("start to fetch github repos...");
         let now = time::Instant::now();
         let mut handles = vec![];
 
@@ -32,7 +31,7 @@ impl RepoFetcher {
                 let repos = GithubRepoFetcher::repositories(&config).await;
                 let repos = match repos {
                     Err(e) => {
-                        error!("Fetch github repos error: {}", e);
+                        println!("Fetch github repos error: {}", e);
                         exit(1)
                     }
                     Ok(repos) => repos,
@@ -41,7 +40,7 @@ impl RepoFetcher {
                 let f = File::create(&config.destination);
                 let f = match f {
                     Err(e) => {
-                        error!(
+                        println!(
                             "Failed to create file '{}', error: {}",
                             &config.destination, e
                         );
@@ -51,10 +50,10 @@ impl RepoFetcher {
                 };
 
                 if let Err(e) = serde_yaml::to_writer(f, &repos) {
-                    error!("Failed to unmarshal serde object, error: {}", e);
+                    println!("Failed to unmarshal serde object, error: {}", e);
                     exit(1)
                 };
-                info!("save database file '{}'", &config.destination);
+                println!("save database file '{}'", &config.destination);
             });
             handles.push(handle);
         }
@@ -63,7 +62,7 @@ impl RepoFetcher {
             handle.await?;
         }
 
-        info!(
+        println!(
             "[github]: all repos have been fetched, elapsed: {:#?}",
             now.elapsed()
         );
@@ -99,7 +98,7 @@ impl GithubRepoFetcher {
                 ("affiliation", affiliation.as_str()),
             ];
 
-            info!("fetching github repos page: {}", page);
+            println!("fetching github repos page: {}", page);
             let response = reqwest::Client::new()
                 .get(GITHUB_API)
                 .query(&params)
@@ -122,14 +121,14 @@ impl GithubRepoFetcher {
                 let mut ignore = false;
                 for excluded in exclude_orgs.iter() {
                     if repo.full_name.starts_with(excluded) {
-                        info!("[excludeOrgs] skip repo '{}' ", repo.full_name);
+                        println!("[excludeOrgs] skip repo '{}' ", repo.full_name);
                         ignore = true;
                         break;
                     }
                 }
                 for excluded in exclude_repos.iter() {
                     if repo.full_name.starts_with(excluded) {
-                        info!("[excludeRepos] skip repo '{}' ", repo.full_name);
+                        println!("[excludeRepos] skip repo '{}' ", repo.full_name);
                         ignore = true;
                         break;
                     }
@@ -151,7 +150,7 @@ impl GithubRepoFetcher {
             }
         }
 
-        info!("[github]: fetch total {} repos", repos.len());
+        println!("[github]: fetch total {} repos", repos.len());
         Ok(repos)
     }
 }

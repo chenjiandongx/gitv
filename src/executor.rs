@@ -1,4 +1,5 @@
 use crate::config;
+use crate::record;
 use chrono::{prelude::*, Duration};
 use datafusion::{
     arrow::{
@@ -18,7 +19,7 @@ use datafusion::{
     scalar::ScalarValue,
 };
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 lazy_static! {
     /// udf 函数集合
@@ -58,8 +59,16 @@ impl Executor {
         }
 
         for c in config {
-            ctx.register_csv(&c.table_name, &c.file, CsvReadOptions::new())
+            let mut p = Path::new(&c.dir).join(record::RecordCommit::name());
+            p.set_extension("csv");
+            if p.exists() {
+                ctx.register_csv(
+                    format!("{}.{}", &c.db_name, record::RecordCommit::name()).as_str(),
+                    p.to_str().unwrap(),
+                    CsvReadOptions::new(),
+                )
                 .await?;
+            }
         }
         Ok(ctx)
     }

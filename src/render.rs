@@ -5,7 +5,6 @@ use datafusion::{
     arrow::{array, datatypes::DataType},
     prelude::ExecutionContext,
 };
-use lazy_static::lazy_static;
 use rand::prelude::*;
 use serde::Serialize;
 use serde_yaml::{Mapping, Number, Value};
@@ -255,16 +254,66 @@ impl ResultRender for TableRender {
     }
 }
 
+static TEMPLATE_CHART: &str = include_str!("../static/chart.tpl");
+static CONTENT_COLORS: &str = include_str!("../static/colors.yaml");
+static CONTENT_FUNCTIONS: &str = include_str!("../static/functions.yaml");
+
+fn include_colors() -> HashMap<String, Vec<Value>> {
+    let values: Value = serde_yaml::from_str(CONTENT_COLORS).unwrap();
+    let mappings = values.as_mapping().unwrap().clone();
+    let mut hm = HashMap::new();
+    for (k, v) in mappings {
+        hm.insert(
+            k.as_str().unwrap().to_string(),
+            v.as_sequence().unwrap().clone(),
+        );
+    }
+    hm
+}
+
+fn include_functions() -> HashMap<String, Value> {
+    let values: Value = serde_yaml::from_str(CONTENT_FUNCTIONS).unwrap();
+    let mappings = values.as_mapping().unwrap().clone();
+    let mut hm = HashMap::new();
+    for (k, v) in mappings {
+        hm.insert(
+            k.as_str().unwrap().to_string(),
+            Value::String(v.as_str().unwrap().to_string()),
+        );
+    }
+    hm
+}
+
 struct ChartRender {
     config: config::RenderAction,
     engine: Engine,
+    colors: HashMap<String, Vec<Value>>,
+    functions: HashMap<String, Value>,
 }
 
 impl ChartRender {
     fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
+        let mut colors = HashMap::new();
+        for (k, v) in config.colors.clone().unwrap_or_default() {
+            colors.insert(k, v);
+        }
+        for (k, v) in include_colors() {
+            colors.insert(k, v);
+        }
+
+        let mut functions = HashMap::new();
+        for (k, v) in config.functions.clone().unwrap_or_default() {
+            functions.insert(k, v);
+        }
+        for (k, v) in include_functions() {
+            functions.insert(k, v);
+        }
+
         Self {
             config,
             engine: Engine::new(ctx),
+            colors,
+            functions,
         }
     }
 }
@@ -333,41 +382,6 @@ impl KeyType {
             KeyType::Random => "random",
         }
     }
-}
-
-static TEMPLATE_CHART: &str = include_str!("../static/chart.tpl");
-static CONTENT_COLORS: &str = include_str!("../static/colors.yaml");
-static CONTENT_FUNCTIONS: &str = include_str!("../static/functions.yaml");
-
-lazy_static! {
-    static ref COLORS: HashMap<String, Vec<Value>> = include_colors();
-    static ref FUNCTIONS: HashMap<String, Value> = include_functions();
-}
-
-fn include_colors() -> HashMap<String, Vec<Value>> {
-    let values: Value = serde_yaml::from_str(CONTENT_COLORS).unwrap();
-    let mappings = values.as_mapping().unwrap().clone();
-    let mut hm = HashMap::new();
-    for (k, v) in mappings {
-        hm.insert(
-            k.as_str().unwrap().to_string(),
-            v.as_sequence().unwrap().clone(),
-        );
-    }
-    hm
-}
-
-fn include_functions() -> HashMap<String, Value> {
-    let values: Value = serde_yaml::from_str(CONTENT_FUNCTIONS).unwrap();
-    let mappings = values.as_mapping().unwrap().clone();
-    let mut hm = HashMap::new();
-    for (k, v) in mappings {
-        hm.insert(
-            k.as_str().unwrap().to_string(),
-            Value::String(v.as_str().unwrap().to_string()),
-        );
-    }
-    hm
 }
 
 impl ChartRender {
@@ -469,7 +483,7 @@ impl ChartRender {
             let key = key.as_str().unwrap_or_default();
             if key == KeyType::Formatter.as_str() {
                 let var = self.parse_variable(val.as_str().unwrap_or_default())?;
-                if let Some(f) = FUNCTIONS.get(&var.1) {
+                if let Some(f) = self.functions.get(&var.1) {
                     *val = f.clone();
                 }
             }
@@ -562,11 +576,11 @@ impl ChartRender {
         if var.1 == KeyType::Random.as_str() {
             let mut rng = rand::thread_rng();
             let n: usize = rng.gen();
-            let k = COLORS.keys().nth(n % COLORS.len())?;
+            let k = self.colors.keys().nth(n % self.colors.len())?;
             println!("[render]: random colors select '{}'", k);
-            return Some(COLORS.get(k)?);
+            return Some(self.colors.get(k)?);
         }
-        Some(COLORS.get(&var.1)?)
+        Some(self.colors.get(&var.1)?)
     }
 }
 

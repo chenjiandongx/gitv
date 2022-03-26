@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
-use std::fs::File;
+use std::{collections::HashMap, fs::File};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,6 +126,8 @@ pub struct Execution {
 pub struct RenderAction {
     pub executions: Vec<Execution>,
     pub display: Display,
+    pub colors: Option<HashMap<String, Vec<Value>>>,
+    pub functions: Option<HashMap<String, Value>>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

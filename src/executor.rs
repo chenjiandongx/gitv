@@ -62,6 +62,7 @@ impl Executor {
             Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordChange::name()).await?;
             Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordTag::name()).await?;
             Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordSnapshot::name()).await?;
+            Self::register(&mut ctx, &c.dir, &c.db_name, record::RecordActive::name()).await?;
         }
         Ok(ctx)
     }

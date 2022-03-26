@@ -20,6 +20,7 @@ pub enum RecordType {
     Change(RecordChange),
     Tag(RecordTag),
     Snapshot(RecordSnapshot),
+    Active(RecordActive),
 }
 
 #[derive(Debug, Default, Serialize, Clone)]
@@ -85,6 +86,20 @@ pub struct RecordSnapshot {
 impl RecordSnapshot {
     pub fn name() -> String {
         String::from("snapshot")
+    }
+}
+
+#[derive(Debug, Default, Serialize, Clone)]
+pub struct RecordActive {
+    pub repo_name: String,
+    pub forks: usize,
+    pub watch: usize,
+    pub stars: usize,
+}
+
+impl RecordActive {
+    pub fn name() -> String {
+        String::from("active")
     }
 }
 
@@ -184,6 +199,19 @@ impl CsvSerializer {
         Ok(())
     }
 
+    async fn serialize_active(tx: Sender<RecordType>, repo: &Repository) -> Result<()> {
+        let record = RecordActive {
+            repo_name: repo.name.clone(),
+            forks: repo.forks_count.unwrap_or_default(),
+            watch: repo.watchers_count.unwrap_or_default(),
+            stars: repo.stargazers_count.unwrap_or_default(),
+        };
+        if tx.send(RecordType::Active(record)).await.is_err() {
+            return Ok(());
+        }
+        Ok(())
+    }
+
     async fn serialize_records(
         database: Database,
         author_mappings: Vec<AuthorMapping>,
@@ -229,6 +257,11 @@ impl CsvSerializer {
                     exit(1)
                 }
 
+                if let Err(e) = Self::serialize_active(tx.clone(), &repo).await {
+                    println!("Failed to analyzer repo active, error: {}", e);
+                    exit(1)
+                }
+
                 let mut lock = mutex.lock().unwrap();
                 *lock += 1;
                 let n = lock;
@@ -253,13 +286,16 @@ impl CsvSerializer {
             let mut tag_wtr = CsvWriter::try_new(&database.dir, RecordTag::name(), FLUSH_SIZE);
             let mut snapshot_wtr =
                 CsvWriter::try_new(&database.dir, RecordSnapshot::name(), FLUSH_SIZE);
+            let mut active_wtr =
+                CsvWriter::try_new(&database.dir, RecordActive::name(), FLUSH_SIZE);
 
             while let Some(record) = rx.recv().await {
                 match record {
-                    RecordType::Commit(_) => commit_wtr.write(record),
-                    RecordType::Change(_) => change_wtr.write(record),
-                    RecordType::Tag(_) => tag_wtr.write(record),
-                    RecordType::Snapshot(_) => snapshot_wtr.write(record),
+                    RecordType::Commit(commit) => commit_wtr.write(commit),
+                    RecordType::Change(change) => change_wtr.write(change),
+                    RecordType::Tag(tag) => tag_wtr.write(tag),
+                    RecordType::Snapshot(snapshot) => snapshot_wtr.write(snapshot),
+                    RecordType::Active(active) => active_wtr.write(active),
                 }
             }
 
@@ -267,6 +303,7 @@ impl CsvSerializer {
             change_wtr.flush();
             tag_wtr.flush();
             snapshot_wtr.flush();
+            active_wtr.flush();
         });
 
         for handle in handles {

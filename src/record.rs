@@ -239,24 +239,24 @@ impl CsvSerializer {
                 if let Err(e) =
                     Self::serialize_commits(tx.clone(), &repo, author_mappings.clone()).await
                 {
-                    println!("Failed to analyzer repo commits, error: {}", e);
+                    println!("Failed to analyze repo commits, error: {}", e);
                     exit(1)
                 }
 
                 if let Err(e) =
                     Self::serialize_tags(tx.clone(), &repo, author_mappings.clone()).await
                 {
-                    println!("Failed to analyzer repo tags, error: {}", e);
+                    println!("Failed to analyze repo tags, error: {}", e);
                     exit(1)
                 }
 
                 if let Err(e) = Self::serialize_snapshot(tx.clone(), &repo).await {
-                    println!("Failed to analyzer repo snapshot, error: {}", e);
+                    println!("Failed to analyze repo snapshot, error: {}", e);
                     exit(1)
                 }
 
                 if let Err(e) = Self::serialize_active(tx.clone(), &repo).await {
-                    println!("Failed to analyzer repo active, error: {}", e);
+                    println!("Failed to analyze repo active, error: {}", e);
                     exit(1)
                 }
 

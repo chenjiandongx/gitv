@@ -93,7 +93,6 @@ impl RecordSnapshot {
 pub struct RecordActive {
     pub repo_name: String,
     pub forks: usize,
-    pub watch: usize,
     pub stars: usize,
 }
 
@@ -203,7 +202,6 @@ impl CsvSerializer {
         let record = RecordActive {
             repo_name: repo.name.clone(),
             forks: repo.forks_count.unwrap_or_default(),
-            watch: repo.watchers_count.unwrap_or_default(),
             stars: repo.stargazers_count.unwrap_or_default(),
         };
         if tx.send(RecordType::Active(record)).await.is_err() {
@@ -280,30 +278,30 @@ impl CsvSerializer {
 
         let rev = tokio::spawn(async move {
             let mut commit_wtr =
-                CsvWriter::try_new(&database.dir, RecordCommit::name(), FLUSH_SIZE);
+                CsvWriter::must_new(&database.dir, RecordCommit::name(), FLUSH_SIZE);
             let mut change_wtr =
-                CsvWriter::try_new(&database.dir, RecordChange::name(), FLUSH_SIZE);
-            let mut tag_wtr = CsvWriter::try_new(&database.dir, RecordTag::name(), FLUSH_SIZE);
+                CsvWriter::must_new(&database.dir, RecordChange::name(), FLUSH_SIZE);
+            let mut tag_wtr = CsvWriter::must_new(&database.dir, RecordTag::name(), FLUSH_SIZE);
             let mut snapshot_wtr =
-                CsvWriter::try_new(&database.dir, RecordSnapshot::name(), FLUSH_SIZE);
+                CsvWriter::must_new(&database.dir, RecordSnapshot::name(), FLUSH_SIZE);
             let mut active_wtr =
-                CsvWriter::try_new(&database.dir, RecordActive::name(), FLUSH_SIZE);
+                CsvWriter::must_new(&database.dir, RecordActive::name(), FLUSH_SIZE);
 
             while let Some(record) = rx.recv().await {
                 match record {
-                    RecordType::Commit(commit) => commit_wtr.write(commit),
-                    RecordType::Change(change) => change_wtr.write(change),
-                    RecordType::Tag(tag) => tag_wtr.write(tag),
-                    RecordType::Snapshot(snapshot) => snapshot_wtr.write(snapshot),
-                    RecordType::Active(active) => active_wtr.write(active),
+                    RecordType::Commit(commit) => commit_wtr.must_write(commit),
+                    RecordType::Change(change) => change_wtr.must_write(change),
+                    RecordType::Tag(tag) => tag_wtr.must_write(tag),
+                    RecordType::Snapshot(snapshot) => snapshot_wtr.must_write(snapshot),
+                    RecordType::Active(active) => active_wtr.must_write(active),
                 }
             }
 
-            commit_wtr.flush();
-            change_wtr.flush();
-            tag_wtr.flush();
-            snapshot_wtr.flush();
-            active_wtr.flush();
+            commit_wtr.must_flush();
+            change_wtr.must_flush();
+            tag_wtr.must_flush();
+            snapshot_wtr.must_flush();
+            active_wtr.must_flush();
         });
 
         for handle in handles {
@@ -323,7 +321,7 @@ struct CsvWriter {
 }
 
 impl CsvWriter {
-    fn try_new(dir: &str, name: String, size: usize) -> Self {
+    fn must_new(dir: &str, name: String, size: usize) -> Self {
         let wtr = match csv::Writer::from_path(Path::new(dir).join(format!("{}.csv", name))) {
             Ok(wtr) => wtr,
             Err(e) => {
@@ -334,19 +332,19 @@ impl CsvWriter {
         Self { wtr, size, curr: 0 }
     }
 
-    fn write<T: Serialize>(&mut self, record: T) {
+    fn must_write<T: Serialize>(&mut self, record: T) {
         self.curr += 1;
         if let Err(e) = self.wtr.serialize(record) {
             println!("Failed to serialize record, error: {}", e);
             exit(1)
         }
         if self.curr >= self.size {
-            self.flush();
+            self.must_flush();
             self.curr = 0;
         }
     }
 
-    fn flush(&mut self) {
+    fn must_flush(&mut self) {
         if let Err(e) = self.wtr.flush() {
             println!("Failed to flush record, error: {}", e);
             exit(1)

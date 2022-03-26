@@ -82,7 +82,6 @@ struct GithubRepoResponse {
     default_branch: String,
     forks_count: usize,
     stargazers_count: usize,
-    watchers_count: usize,
 }
 
 impl GithubRepoFetcher {
@@ -150,7 +149,6 @@ impl GithubRepoFetcher {
                             .to_string(),
                         forks_count: Some(repo.forks_count),
                         stargazers_count: Some(repo.stargazers_count),
-                        watchers_count: Some(repo.watchers_count),
                     });
                 }
             }

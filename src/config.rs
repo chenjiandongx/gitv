@@ -24,7 +24,6 @@ pub struct Repository {
     pub path: String,
     pub forks_count: Option<usize>,
     pub stargazers_count: Option<usize>,
-    pub watchers_count: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Hash)]

@@ -161,7 +161,7 @@ impl Engine {
                             .downcast_ref::<array::Int16Array>()
                             .unwrap()
                             .iter()
-                            .map(|x| Value::Number(Number::from(x.unwrap() as i16)))
+                            .map(|x| Value::Number(Number::from(x.unwrap() as i64)))
                             .collect::<Vec<Value>>();
                         let v = cm.store.entry(name).or_insert(vec![]);
                         v.extend(downcast)
@@ -239,8 +239,7 @@ impl TableRender {
 #[async_trait]
 impl ResultRender for TableRender {
     async fn render(&mut self) -> Result<()> {
-        let display = self.config.display.clone();
-        let queries = display.queries.clone();
+        let queries = self.config.display.queries.clone();
         for query in queries {
             for sql in query.statements {
                 let now = time::Instant::now();
@@ -293,18 +292,12 @@ struct ChartRender {
 
 impl ChartRender {
     fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
-        let mut colors = HashMap::new();
-        for (k, v) in include_colors() {
-            colors.insert(k, v);
-        }
+        let mut colors = include_colors();
         for (k, v) in config.colors.clone().unwrap_or_default() {
             colors.insert(k, v);
         }
 
-        let mut functions = HashMap::new();
-        for (k, v) in include_functions() {
-            functions.insert(k, v);
-        }
+        let mut functions = include_functions();
         for (k, v) in config.functions.clone().unwrap_or_default() {
             functions.insert(k, v);
         }

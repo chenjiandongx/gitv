@@ -182,7 +182,7 @@ impl GithubRepoFetcher {
 
         let repos = Self::repositories(&config.clone_dir, params, &api.url(""), &config.token)
             .await?
-            .iter()
+            .into_iter()
             .filter(|repo| {
                 !(Self::exclude_orgs_filter(&config.clone().exclude_orgs.unwrap_or_default(), repo)
                     || Self::exclude_repos_filter(
@@ -190,7 +190,6 @@ impl GithubRepoFetcher {
                         repo,
                     ))
             })
-            .map(|x| x.clone())
             .collect::<Vec<_>>();
 
         Ok(repos)
@@ -207,11 +206,10 @@ impl GithubRepoFetcher {
             &config.token,
         )
         .await?
-        .iter()
+        .into_iter()
         .filter(|repo| {
             !Self::exclude_repos_filter(&config.clone().exclude_repos.unwrap_or_default(), repo)
         })
-        .map(|x| x.clone())
         .collect::<Vec<_>>();
 
         Ok(repos)
@@ -228,11 +226,10 @@ impl GithubRepoFetcher {
             &config.token,
         )
         .await?
-        .iter()
+        .into_iter()
         .filter(|repo| {
             !Self::exclude_repos_filter(&config.clone().exclude_repos.unwrap_or_default(), repo)
         })
-        .map(|x| x.clone())
         .collect::<Vec<_>>();
 
         Ok(repos)

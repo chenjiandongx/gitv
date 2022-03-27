@@ -294,18 +294,18 @@ struct ChartRender {
 impl ChartRender {
     fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
         let mut colors = HashMap::new();
-        for (k, v) in config.colors.clone().unwrap_or_default() {
+        for (k, v) in include_colors() {
             colors.insert(k, v);
         }
-        for (k, v) in include_colors() {
+        for (k, v) in config.colors.clone().unwrap_or_default() {
             colors.insert(k, v);
         }
 
         let mut functions = HashMap::new();
-        for (k, v) in config.functions.clone().unwrap_or_default() {
+        for (k, v) in include_functions() {
             functions.insert(k, v);
         }
-        for (k, v) in include_functions() {
+        for (k, v) in config.functions.clone().unwrap_or_default() {
             functions.insert(k, v);
         }
 

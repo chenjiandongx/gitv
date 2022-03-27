@@ -163,7 +163,7 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        for tag in GitImpl::tags(&repo, author_mappings).await? {
+        for tag in GitImpl::tags(repo, author_mappings).await? {
             let record = RecordTag {
                 repo_name: repo.name.clone(),
                 datetime: datetime_rfc339(&tag.datetime),
@@ -178,7 +178,7 @@ impl CsvSerializer {
     }
 
     async fn serialize_snapshot(tx: Sender<RecordType>, repo: &Repository) -> Result<()> {
-        let snapshot = GitImpl::snapshot(&repo).await?;
+        let snapshot = GitImpl::snapshot(repo).await?;
         for stat in snapshot.stats {
             let record = RecordSnapshot {
                 repo_name: repo.name.clone(),

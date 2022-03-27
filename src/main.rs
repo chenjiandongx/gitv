@@ -46,7 +46,8 @@ async fn main() -> Result<()> {
         exit(0)
     }
 
-    let c: Config = match config::load_config(&cli.path.unwrap_or("gitv.yaml".to_string())) {
+    let c: Config = match config::load_config(&cli.path.unwrap_or_else(|| "gitv.yaml".to_string()))
+    {
         Err(e) => {
             println!("Load config error: {}", e);
             exit(1);

@@ -8,13 +8,7 @@ use datafusion::{
 use rand::prelude::*;
 use serde::Serialize;
 use serde_yaml::{Mapping, Number, Value};
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    fs::File,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, fmt::Debug, fs::File, io::Write, path::Path};
 use tera::{Context, Tera};
 use tokio::time;
 
@@ -404,7 +398,7 @@ impl ChartRender {
         &mut self,
         chart_config: config::ChartConfig,
         cms: &[ColumnMap],
-        dest: &PathBuf,
+        dest: &Path,
     ) -> Result<()> {
         if cms.is_empty() {
             return Ok(());

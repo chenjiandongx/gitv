@@ -285,7 +285,7 @@ struct ChartRender {
 }
 
 impl ChartRender {
-    fn new(ctx: ExecutionContext, config: config::RenderAction) -> Self {
+    fn new(ctx: ExecutionContext, config: config::RenderAction) -> ChartRender {
         let mut colors = include_colors();
         for (k, v) in config.colors.clone().unwrap_or_default() {
             colors.insert(k, v);

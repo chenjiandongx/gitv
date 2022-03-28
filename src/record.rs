@@ -6,7 +6,6 @@ use serde::Serialize;
 use std::{
     fs::File,
     path::Path,
-    process::exit,
     sync::{Arc, Mutex},
 };
 use tokio::{
@@ -106,7 +105,7 @@ impl RecordActive {
 fn datetime_rfc339(datetime: &str) -> String {
     match DateTime::parse_from_rfc2822(datetime) {
         Ok(t) => t.to_rfc3339(),
-        Err(_) => format!(""),
+        Err(_) => String::new(),
     }
 }
 
@@ -251,12 +250,12 @@ impl CsvSerializer {
                 }
                 2 => {
                     handles.push(tokio::spawn(async move {
-                        Self::serialize_tags(tx.clone(), &repo.clone(), mappings).await
+                        Self::serialize_tags(tx.clone(), &repo, mappings).await
                     }));
                 }
                 3 => {
                     handles.push(tokio::spawn(async move {
-                        Self::serialize_active(tx.clone(), &repo.clone()).await
+                        Self::serialize_active(tx.clone(), &repo).await
                     }));
                 }
                 _ => unreachable!(),
@@ -271,6 +270,7 @@ impl CsvSerializer {
     async fn serialize_records(
         database: Database,
         author_mappings: Vec<AuthorMapping>,
+        disable_pull: bool,
     ) -> Result<()> {
         const BUFFER_SIZE: usize = 1000;
         let repos = database.load()?;
@@ -280,7 +280,7 @@ impl CsvSerializer {
         let mutex = Arc::new(Mutex::new(0));
         let mut handles: Vec<JoinHandle<Result<(), anyhow::Error>>> = vec![];
 
-        GitImpl::clone_or_pull(repos.clone()).await?;
+        GitImpl::clone_or_pull(repos.clone(), disable_pull).await?;
         for repo in repos {
             let repo = repo.clone();
             let mappings = author_mappings.clone();
@@ -307,31 +307,30 @@ impl CsvSerializer {
             handles.push(handle)
         }
 
-        const FLUSH_SIZE: usize = 500;
-
-        let rev = tokio::spawn(async move {
+        let rev: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
             let dir = &database.dir;
-            let mut commit_wtr = CsvWriter::must_new(dir, RecordCommit::name(), FLUSH_SIZE);
-            let mut change_wtr = CsvWriter::must_new(dir, RecordChange::name(), FLUSH_SIZE);
-            let mut tag_wtr = CsvWriter::must_new(dir, RecordTag::name(), FLUSH_SIZE);
-            let mut snapshot_wtr = CsvWriter::must_new(dir, RecordSnapshot::name(), FLUSH_SIZE);
-            let mut active_wtr = CsvWriter::must_new(dir, RecordActive::name(), FLUSH_SIZE);
+            let mut commit_wtr = CsvWriter::try_new(dir, RecordCommit::name())?;
+            let mut change_wtr = CsvWriter::try_new(dir, RecordChange::name())?;
+            let mut tag_wtr = CsvWriter::try_new(dir, RecordTag::name())?;
+            let mut snapshot_wtr = CsvWriter::try_new(dir, RecordSnapshot::name())?;
+            let mut active_wtr = CsvWriter::try_new(dir, RecordActive::name())?;
 
             while let Some(record) = rx.recv().await {
                 match record {
-                    RecordType::Commit(commit) => commit_wtr.must_write(commit),
-                    RecordType::Change(change) => change_wtr.must_write(change),
-                    RecordType::Tag(tag) => tag_wtr.must_write(tag),
-                    RecordType::Snapshot(snapshot) => snapshot_wtr.must_write(snapshot),
-                    RecordType::Active(active) => active_wtr.must_write(active),
+                    RecordType::Commit(commit) => commit_wtr.write(commit)?,
+                    RecordType::Change(change) => change_wtr.write(change)?,
+                    RecordType::Tag(tag) => tag_wtr.write(tag)?,
+                    RecordType::Snapshot(snapshot) => snapshot_wtr.write(snapshot)?,
+                    RecordType::Active(active) => active_wtr.write(active)?,
                 }
             }
 
-            commit_wtr.must_flush();
-            change_wtr.must_flush();
-            tag_wtr.must_flush();
-            snapshot_wtr.must_flush();
-            active_wtr.must_flush();
+            commit_wtr.flush()?;
+            change_wtr.flush()?;
+            tag_wtr.flush()?;
+            snapshot_wtr.flush()?;
+            active_wtr.flush()?;
+            Ok(())
         });
 
         for handle in handles {
@@ -339,7 +338,7 @@ impl CsvSerializer {
         }
         drop(tx);
 
-        rev.await?;
+        rev.await??;
         Ok(())
     }
 }
@@ -350,35 +349,30 @@ struct CsvWriter {
     curr: usize,
 }
 
+const FLUSH_SIZE: usize = 500;
+
 impl CsvWriter {
-    fn must_new(dir: &str, name: String, size: usize) -> CsvWriter {
-        let wtr = match csv::Writer::from_path(Path::new(dir).join(format!("{}.csv", name))) {
-            Ok(wtr) => wtr,
-            Err(e) => {
-                println!("Failed to create {} writer, error: {}", name, e);
-                exit(1)
-            }
-        };
-        Self { wtr, size, curr: 0 }
+    fn try_new(dir: &str, name: String) -> Result<CsvWriter> {
+        Ok(Self {
+            wtr: csv::Writer::from_path(Path::new(dir).join(format!("{}.csv", name)))?,
+            size: FLUSH_SIZE,
+            curr: 0,
+        })
     }
 
-    fn must_write<T: Serialize>(&mut self, record: T) {
+    fn write<T: Serialize>(&mut self, record: T) -> Result<()> {
         self.curr += 1;
-        if let Err(e) = self.wtr.serialize(record) {
-            println!("Failed to serialize record, error: {}", e);
-            exit(1)
-        }
+        self.wtr.serialize(record)?;
         if self.curr >= self.size {
-            self.must_flush();
+            self.flush()?;
             self.curr = 0;
         }
+        Ok(())
     }
 
-    fn must_flush(&mut self) {
-        if let Err(e) = self.wtr.flush() {
-            println!("Failed to flush record, error: {}", e);
-            exit(1)
-        }
+    fn flush(&mut self) -> Result<()> {
+        self.wtr.flush()?;
+        Ok(())
     }
 }
 
@@ -386,21 +380,19 @@ impl CsvWriter {
 impl RecordSerializer for CsvSerializer {
     async fn serialize(config: CreateAction) -> Result<()> {
         let mut handles = vec![];
+        let disable_pull = config.disable_pull.unwrap_or(false);
         for database in config.databases {
             let database = database.clone();
             let author_mappings = config.author_mappings.clone().unwrap_or_default();
 
             let handle = tokio::spawn(async move {
-                if let Err(e) = Self::serialize_records(database, author_mappings).await {
-                    println!("Failed to persist records, error: {}", e);
-                    exit(1)
-                }
+                Self::serialize_records(database, author_mappings, disable_pull).await
             });
             handles.push(handle);
         }
 
         for handle in handles {
-            handle.await?;
+            handle.await??;
         }
         Ok(())
     }

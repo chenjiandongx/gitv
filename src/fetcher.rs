@@ -1,8 +1,8 @@
 use crate::{config, Repository};
 use anyhow::Result;
 use serde::Deserialize;
-use std::{fs::File, path::Path, process::exit};
-use tokio::time;
+use std::{fs::File, path::Path};
+use tokio::{task::JoinHandle, time};
 
 #[derive(Debug, Clone)]
 enum GithubConfig {
@@ -40,7 +40,6 @@ impl RepoFetcher {
     async fn fetch_github(&self) -> Result<()> {
         println!("start to fetch github repos...");
         let now = time::Instant::now();
-        let mut handles = vec![];
 
         let mut configs = vec![];
         for config in self.opts.github_authenticated.clone().unwrap_or_default() {
@@ -53,65 +52,28 @@ impl RepoFetcher {
             configs.push(GithubConfig::Org(config));
         }
 
+        let mut handles: Vec<JoinHandle<Result<(), anyhow::Error>>> = vec![];
         for config in configs {
             let config = config.clone();
             let handle = tokio::spawn(async move {
                 let repos = match config {
                     GithubConfig::Authenticated(ref config) => {
-                        let repos = match GithubRepoFetcher::authenticated_repos(config).await {
-                            Err(e) => {
-                                println!("Fetch github authenticated repos error: {}", e);
-                                exit(1)
-                            }
-                            Ok(repos) => repos,
-                        };
-                        repos
+                        GithubRepoFetcher::authenticated_repos(config).await?
                     }
-                    GithubConfig::User(ref config) => {
-                        let repos = match GithubRepoFetcher::user_repos(config).await {
-                            Err(e) => {
-                                println!("Fetch github user repos error: {}", e);
-                                exit(1)
-                            }
-                            Ok(repos) => repos,
-                        };
-                        repos
-                    }
-                    GithubConfig::Org(ref config) => {
-                        let repos = match GithubRepoFetcher::org_repos(config).await {
-                            Err(e) => {
-                                println!("Fetch github user repos error: {}", e);
-                                exit(1)
-                            }
-                            Ok(repos) => repos,
-                        };
-                        repos
-                    }
+                    GithubConfig::User(ref config) => GithubRepoFetcher::user_repos(config).await?,
+                    GithubConfig::Org(ref config) => GithubRepoFetcher::org_repos(config).await?,
                 };
 
-                let f = match File::create(&config.destination()) {
-                    Err(e) => {
-                        println!(
-                            "Failed to create file '{}', error: {}",
-                            &config.destination(),
-                            e
-                        );
-                        exit(1)
-                    }
-                    Ok(f) => f,
-                };
-
-                if let Err(e) = serde_yaml::to_writer(f, &repos) {
-                    println!("Failed to unmarshal serde object, error: {}", e);
-                    exit(1)
-                };
+                let f = File::create(&config.destination())?;
+                serde_yaml::to_writer(f, &repos)?;
                 println!("save database file '{}'", &config.destination());
+                Ok(())
             });
             handles.push(handle);
         }
 
         for handle in handles {
-            handle.await?;
+            handle.await??;
         }
 
         println!(

@@ -7,11 +7,11 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::Path,
-    process::exit,
     sync::{Arc, Mutex},
     time,
 };
 use tokei::{Config, Languages};
+use tokio::task::JoinHandle;
 
 /// 提交记录
 #[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
@@ -211,16 +211,16 @@ impl Parser {
                     2 => change.deletion = cap.parse::<usize>().unwrap_or_default(),
                     3 => {
                         let p = Path::new(cap);
-                        if p.extension().is_some() {
-                            change.ext = p.extension().unwrap().to_str().unwrap().to_string();
-                            let n = change.ext.len() as usize - 1;
-                            if let Some(cs) = change.ext.chars().nth(n) {
-                                if cs.is_ascii_alphanumeric() {
-                                    change.ext.remove(n);
-                                }
+                        if p.extension().is_none() {
+                            change.ext = String::new();
+                            continue;
+                        }
+                        change.ext = p.extension().unwrap().to_str().unwrap().to_string();
+                        let n = change.ext.len() as usize - 1;
+                        if let Some(cs) = change.ext.chars().nth(n) {
+                            if cs.is_ascii_alphanumeric() {
+                                change.ext.remove(n);
                             }
-                        } else {
-                            change.ext = "".to_string();
                         }
                     }
                     _ => (),
@@ -294,13 +294,13 @@ impl GitImpl {
         let first_ts = DateTime::parse_from_rfc2822(&first_commit.datetime)?.timestamp();
         let last_ts = DateTime::parse_from_rfc2822(&last_commit.datetime)?.timestamp();
 
-        const DURATION: i64 = 3600 * 24 * 90; // 90days
+        const DURATION: i64 = 3600 * 24 * 120; // 120days
         let data = Self::calc_range(DURATION, first_ts, last_ts);
 
         if data.len() == 1 {
             let first = &data[0];
             if first.0 == first.1 {
-                return Ok(vec![("".to_string(), "".to_string())]);
+                return Ok(vec![(String::new(), String::new())]);
             }
         }
         Ok(data)
@@ -328,8 +328,8 @@ impl GitImpl {
 }
 
 impl GitImpl {
-    pub async fn clone_or_pull(repos: Vec<Repository>) -> Result<()> {
-        let mut handles = vec![];
+    pub async fn clone_or_pull(repos: Vec<Repository>, disable_pull: bool) -> Result<()> {
+        let mut handles: Vec<JoinHandle<Result<(), anyhow::Error>>> = vec![];
         let mutex = Arc::new(Mutex::new(0));
         let total = repos.len();
 
@@ -340,30 +340,26 @@ impl GitImpl {
             let handle = tokio::spawn(async move {
                 let now = time::Instant::now();
                 if Path::new(&repo.path).exists() {
-                    if let Err(e) = Git::git_pull(&repo).await {
-                        println!("Failed to execute git pull command, error: {}", e);
-                        exit(1)
-                    };
+                    if !disable_pull {
+                        Git::git_pull(&repo).await?;
+                        let mut lock = mutex.lock().unwrap();
+                        *lock += 1;
+                        let n = *lock;
 
-                    let mut lock = mutex.lock().unwrap();
-                    *lock += 1;
-                    let n = *lock;
-                    println!(
-                        "[{}/{}] git pull '{}' => elapsed {:#?}",
-                        n,
-                        total,
-                        &repo.name,
-                        now.elapsed(),
-                    )
+                        println!(
+                            "[{}/{}] git pull '{}' => elapsed {:#?}",
+                            n,
+                            total,
+                            &repo.name,
+                            now.elapsed(),
+                        )
+                    }
                 } else {
-                    if let Err(e) = Git::git_clone(&repo).await {
-                        println!("Failed to execute git clone command, error: {}", e);
-                        exit(1)
-                    };
-
+                    Git::git_clone(&repo).await?;
                     let mut lock = mutex.lock().unwrap();
                     *lock += 1;
                     let n = *lock;
+
                     println!(
                         "[{}/{}] git clone '{}' => elapsed {:#?}",
                         n,
@@ -372,12 +368,13 @@ impl GitImpl {
                         now.elapsed(),
                     )
                 }
+                Ok(())
             });
             handles.push(handle);
         }
 
         for handle in handles {
-            handle.await?;
+            handle.await??;
         }
         Ok(())
     }

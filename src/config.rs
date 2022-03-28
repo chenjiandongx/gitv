@@ -6,6 +6,7 @@ use std::{collections::HashMap, fs::File};
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAction {
+    pub disable_pull: Option<bool>,
     pub author_mappings: Option<Vec<AuthorMapping>>,
     pub databases: Vec<Database>,
 }

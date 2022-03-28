@@ -58,7 +58,7 @@ impl RepoFetcher {
             let handle = tokio::spawn(async move {
                 let repos = match config {
                     GithubConfig::Authenticated(ref config) => {
-                        let repos = match GithubRepoFetcher::authenticated_repos(&config).await {
+                        let repos = match GithubRepoFetcher::authenticated_repos(config).await {
                             Err(e) => {
                                 println!("Fetch github authenticated repos error: {}", e);
                                 exit(1)
@@ -68,7 +68,7 @@ impl RepoFetcher {
                         repos
                     }
                     GithubConfig::User(ref config) => {
-                        let repos = match GithubRepoFetcher::user_repos(&config).await {
+                        let repos = match GithubRepoFetcher::user_repos(config).await {
                             Err(e) => {
                                 println!("Fetch github user repos error: {}", e);
                                 exit(1)
@@ -78,7 +78,7 @@ impl RepoFetcher {
                         repos
                     }
                     GithubConfig::Org(ref config) => {
-                        let repos = match GithubRepoFetcher::org_repos(&config).await {
+                        let repos = match GithubRepoFetcher::org_repos(config).await {
                             Err(e) => {
                                 println!("Fetch github user repos error: {}", e);
                                 exit(1)
@@ -135,8 +135,8 @@ impl GithubApi {
     fn url(&self, s: &str) -> String {
         match self {
             GithubApi::Authenticated => String::from("https://api.github.com/user/repos"),
-            GithubApi::User => String::from(format!("https://api.github.com/users/{}/repos", s)),
-            GithubApi::Org => String::from(format!("https://api.github.com/orgs/{}/repos", s)),
+            GithubApi::User => format!("https://api.github.com/users/{}/repos", s),
+            GithubApi::Org => format!("https://api.github.com/orgs/{}/repos", s),
         }
     }
 }

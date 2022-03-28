@@ -33,3 +33,4 @@ serde_yaml = "0.8"
 tera = "1"
 tokei = "12"
 tokio = {version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync"]}
+num_cpus = "1.0"

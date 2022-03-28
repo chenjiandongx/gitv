@@ -10,7 +10,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::{
-    sync::{self, mpsc::Sender},
+    sync::{self, mpsc::Sender, Semaphore},
+    task::JoinHandle,
     time,
 };
 
@@ -104,8 +105,8 @@ impl RecordActive {
 
 fn datetime_rfc339(datetime: &str) -> String {
     match DateTime::parse_from_rfc2822(datetime) {
-        Ok(t) => t.to_rfc3339().to_string(),
-        Err(_) => "".to_string(),
+        Ok(t) => t.to_rfc3339(),
+        Err(_) => format!(""),
     }
 }
 
@@ -125,35 +126,54 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        for commit in GitImpl::commits(&repo, author_mappings).await? {
-            let record = RecordCommit {
-                repo_name: repo.name.clone(),
-                branch: repo.branch.clone().unwrap_or_default(),
-                datetime: datetime_rfc339(&commit.datetime),
-                author_name: commit.author.name.clone(),
-                author_email: commit.author.email.clone(),
-                author_domain: commit.author.domain(),
-            };
-            if tx.send(RecordType::Commit(record)).await.is_err() {
-                return Ok(());
-            }
+        let mut handles: Vec<JoinHandle<Result<(), anyhow::Error>>> = vec![];
+        let semaphore = Arc::new(Semaphore::new(num_cpus::get()));
+        for (since, before) in GitImpl::get_commits_range(repo).await? {
+            let repo = repo.clone();
+            let mappings = author_mappings.clone();
+            let tx = tx.clone();
+            let semaphore = semaphore.clone();
 
-            for fc in commit.changes {
-                let record = RecordChange {
-                    repo_name: repo.name.clone(),
-                    branch: repo.branch.clone().unwrap_or_default(),
-                    datetime: datetime_rfc339(&commit.datetime),
-                    author_name: commit.author.name.clone(),
-                    author_email: commit.author.email.clone(),
-                    author_domain: commit.author.domain(),
-                    ext: fc.ext,
-                    insertion: fc.insertion,
-                    deletion: fc.deletion,
-                };
-                if tx.send(RecordType::Change(record)).await.is_err() {
-                    return Ok(());
+            let handle = tokio::spawn(async move {
+                let _permit = semaphore.acquire().await.unwrap();
+                let commits = GitImpl::commits(&repo, mappings, since, before).await?;
+                for commit in commits {
+                    let record = RecordCommit {
+                        repo_name: repo.name.clone(),
+                        branch: repo.branch.clone().unwrap_or_default(),
+                        datetime: datetime_rfc339(&commit.datetime),
+                        author_name: commit.author.name.clone(),
+                        author_email: commit.author.email.clone(),
+                        author_domain: commit.author.domain(),
+                    };
+                    if tx.send(RecordType::Commit(record)).await.is_err() {
+                        return Ok(());
+                    };
+
+                    for fc in commit.changes {
+                        let record = RecordChange {
+                            repo_name: repo.name.clone(),
+                            branch: repo.branch.clone().unwrap_or_default(),
+                            datetime: datetime_rfc339(&commit.datetime),
+                            author_name: commit.author.name.clone(),
+                            author_email: commit.author.email.clone(),
+                            author_domain: commit.author.domain(),
+                            ext: fc.ext,
+                            insertion: fc.insertion,
+                            deletion: fc.deletion,
+                        };
+                        if tx.send(RecordType::Change(record)).await.is_err() {
+                            return Ok(());
+                        };
+                    }
                 }
-            }
+                Ok(())
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.await??;
         }
         Ok(())
     }
@@ -208,6 +228,46 @@ impl CsvSerializer {
         Ok(())
     }
 
+    async fn analyze_repo(
+        tx: Sender<RecordType>,
+        repo: &Repository,
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<()> {
+        let mut handles: Vec<JoinHandle<Result<(), anyhow::Error>>> = vec![];
+        for i in 0..4usize {
+            let repo = repo.clone();
+            let tx = tx.clone();
+            let mappings = author_mappings.clone();
+            match i {
+                0 => {
+                    handles.push(tokio::spawn(async move {
+                        Self::serialize_commits(tx.clone(), &repo, mappings).await
+                    }));
+                }
+                1 => {
+                    handles.push(tokio::spawn(async move {
+                        Self::serialize_snapshot(tx.clone(), &repo).await
+                    }));
+                }
+                2 => {
+                    handles.push(tokio::spawn(async move {
+                        Self::serialize_tags(tx.clone(), &repo.clone(), mappings).await
+                    }));
+                }
+                3 => {
+                    handles.push(tokio::spawn(async move {
+                        Self::serialize_active(tx.clone(), &repo.clone()).await
+                    }));
+                }
+                _ => unreachable!(),
+            }
+        }
+        for handle in handles {
+            handle.await??;
+        }
+        Ok(())
+    }
+
     async fn serialize_records(
         database: Database,
         author_mappings: Vec<AuthorMapping>,
@@ -218,45 +278,19 @@ impl CsvSerializer {
 
         let (tx, mut rx) = sync::mpsc::channel::<RecordType>(BUFFER_SIZE);
         let mutex = Arc::new(Mutex::new(0));
-        let mut handles = vec![];
+        let mut handles: Vec<JoinHandle<Result<(), anyhow::Error>>> = vec![];
 
         GitImpl::clone_or_pull(repos.clone()).await?;
         for repo in repos {
             let repo = repo.clone();
-            let author_mappings = author_mappings.clone();
+            let mappings = author_mappings.clone();
             let tx = tx.clone();
             let mutex = mutex.clone();
 
             let handle = tokio::spawn(async move {
                 let now = time::Instant::now();
-                if let Err(e) = GitImpl::checkout(&repo).await {
-                    println!("Failed to execute git checkout command, error: {}", e);
-                    exit(1);
-                }
-
-                if let Err(e) =
-                    Self::serialize_commits(tx.clone(), &repo, author_mappings.clone()).await
-                {
-                    println!("Failed to analyze repo commits, error: {}", e);
-                    exit(1)
-                }
-
-                if let Err(e) =
-                    Self::serialize_tags(tx.clone(), &repo, author_mappings.clone()).await
-                {
-                    println!("Failed to analyze repo tags, error: {}", e);
-                    exit(1)
-                }
-
-                if let Err(e) = Self::serialize_snapshot(tx.clone(), &repo).await {
-                    println!("Failed to analyze repo snapshot, error: {}", e);
-                    exit(1)
-                }
-
-                if let Err(e) = Self::serialize_active(tx.clone(), &repo).await {
-                    println!("Failed to analyze repo active, error: {}", e);
-                    exit(1)
-                }
+                GitImpl::checkout(&repo).await?;
+                Self::analyze_repo(tx.clone(), &repo, mappings).await?;
 
                 let mut lock = mutex.lock().unwrap();
                 *lock += 1;
@@ -267,7 +301,8 @@ impl CsvSerializer {
                     total,
                     repo.name,
                     now.elapsed(),
-                )
+                );
+                Ok(())
             });
             handles.push(handle)
         }
@@ -300,7 +335,7 @@ impl CsvSerializer {
         });
 
         for handle in handles {
-            handle.await?;
+            handle.await??;
         }
         drop(tx);
 
@@ -316,7 +351,7 @@ struct CsvWriter {
 }
 
 impl CsvWriter {
-    fn must_new(dir: &str, name: String, size: usize) -> Self {
+    fn must_new(dir: &str, name: String, size: usize) -> CsvWriter {
         let wtr = match csv::Writer::from_path(Path::new(dir).join(format!("{}.csv", name))) {
             Ok(wtr) => wtr,
             Err(e) => {

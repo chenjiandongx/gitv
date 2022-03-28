@@ -111,7 +111,7 @@ impl Git {
         c.args(args);
 
         let out = c.output().await?.stdout;
-        let lines = String::from_utf8(out)?
+        let lines = String::from_utf8_lossy(&out)
             .split(delimiter)
             .filter(|x| !x.is_empty())
             .map(|x| x.to_string())
@@ -135,7 +135,7 @@ impl Git {
     }
 
     async fn git_pull(repo: &Repository) -> Result<Vec<String>> {
-        Self::git(repo, "pull", &vec![], '\n').await
+        Self::git(repo, "pull", &[], '\n').await
     }
 
     async fn git_log(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
@@ -162,8 +162,9 @@ impl Parser {
     fn parse_commit_info(
         commit: &mut Commit,
         line: &str,
-        author_mappings: Vec<AuthorMapping>,
+        author_mappings: Option<&[AuthorMapping]>,
     ) -> Result<()> {
+        let author_mappings = author_mappings.unwrap_or_default();
         let caps = COMMIT_INFO_REGEXP.captures(line);
         if caps.is_none() {
             return Err(anyhow!("Invalid commit format: {}", line));
@@ -213,8 +214,10 @@ impl Parser {
                         if p.extension().is_some() {
                             change.ext = p.extension().unwrap().to_str().unwrap().to_string();
                             let n = change.ext.len() as usize - 1;
-                            if !change.ext.chars().nth(n).unwrap().is_ascii_alphanumeric() {
-                                change.ext.remove(n);
+                            if let Some(cs) = change.ext.chars().nth(n) {
+                                if cs.is_ascii_alphanumeric() {
+                                    change.ext.remove(n);
+                                }
                             }
                         } else {
                             change.ext = "".to_string();
@@ -241,9 +244,9 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_commit(lines: &[String], author_mappings: Vec<AuthorMapping>) -> Result<Commit> {
+    fn parse_commit(lines: &[String], author_mappings: &[AuthorMapping]) -> Result<Commit> {
         let mut commit = Commit::new();
-        Self::parse_commit_info(&mut commit, &lines[0], author_mappings)?;
+        Self::parse_commit_info(&mut commit, &lines[0], Some(author_mappings))?;
         Self::parse_commit_changes(&mut commit, &lines[1..])?;
         Ok(commit)
     }
@@ -253,7 +256,7 @@ impl Parser {
 pub struct GitImpl;
 
 impl GitImpl {
-    async fn range_commits(repo: &Repository) -> Result<Vec<(String, String)>> {
+    pub async fn get_commits_range(repo: &Repository) -> Result<Vec<(String, String)>> {
         let lines = Git::git_rev_list(repo, &["--max-parents=0", "HEAD"]).await?;
         if lines.is_empty() {
             return Err(anyhow!("Empty git-rev-list output"));
@@ -271,7 +274,7 @@ impl GitImpl {
             return Err(anyhow!("Failed to get first commit detailed"));
         }
         let mut first_commit = Commit::new();
-        Parser::parse_commit_info(&mut first_commit, &lines[0], vec![])?;
+        Parser::parse_commit_info(&mut first_commit, &lines[0], None)?;
 
         let lines = Git::git_log(
             repo,
@@ -286,12 +289,12 @@ impl GitImpl {
             return Err(anyhow!("Failed to get last commit detailed"));
         }
         let mut last_commit = Commit::new();
-        Parser::parse_commit_info(&mut last_commit, &lines[0], vec![])?;
+        Parser::parse_commit_info(&mut last_commit, &lines[0], None)?;
 
         let first_ts = DateTime::parse_from_rfc2822(&first_commit.datetime)?.timestamp();
         let last_ts = DateTime::parse_from_rfc2822(&last_commit.datetime)?.timestamp();
 
-        const DURATION: i64 = 3600 * 24 * 120; // 120days
+        const DURATION: i64 = 3600 * 24 * 90; // 90days
         let data = Self::calc_range(DURATION, first_ts, last_ts);
 
         if data.len() == 1 {
@@ -392,83 +395,61 @@ impl GitImpl {
     pub async fn commits(
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
+        since: String,
+        before: String,
     ) -> Result<Vec<Commit>> {
-        let mutex = Arc::new(Mutex::new(HashSet::new()));
-        let mut handles = vec![];
-        for (since, before) in Self::range_commits(repo).await? {
-            let mutex = mutex.clone();
-            let repo = repo.clone();
-            let author_mappings = author_mappings.clone();
+        let mut data = HashSet::new();
+        let lines = if since.is_empty() && before.is_empty() {
+            Git::git_log(
+                repo,
+                &[
+                    "--no-merges",
+                    "--date=rfc",
+                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                    "--numstat",
+                    "HEAD",
+                ],
+            )
+            .await?
+        } else {
+            Git::git_log(
+                repo,
+                &[
+                    "--no-merges",
+                    "--date=rfc",
+                    &format!("--since={}", since),
+                    &format!("--before={}", before),
+                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                    "--numstat",
+                    "HEAD",
+                ],
+            )
+            .await?
+        };
 
-            let handle = tokio::spawn(async move {
-                let lines = if since.is_empty() && before.is_empty() {
-                    Git::git_log(
-                        &repo,
-                        &[
-                            "--no-merges",
-                            "--date=rfc",
-                            "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                            "--numstat",
-                            "HEAD",
-                        ],
-                    )
-                    .await
-                } else {
-                    Git::git_log(
-                        &repo,
-                        &[
-                            "--no-merges",
-                            "--date=rfc",
-                            &format!("--since={}", since),
-                            &format!("--before={}", before),
-                            "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                            "--numstat",
-                            "HEAD",
-                        ],
-                    )
-                    .await
-                };
+        let mut indexes = vec![];
+        for (idx, line) in lines.iter().enumerate() {
+            if line.starts_with('<') {
+                indexes.push(idx);
+            }
+        }
+        indexes.push(lines.len());
 
-                if let Err(e) = lines {
-                    println!("Failed to execute git log command, error: {}", e);
-                    exit(1)
-                };
-
-                let lines = lines.unwrap();
-                let mut indexes = vec![];
-                for (idx, line) in lines.iter().enumerate() {
-                    if line.starts_with('<') {
-                        indexes.push(idx);
-                    }
-                }
-                indexes.push(lines.len());
-
-                let mut lock = mutex.lock().unwrap();
-                for i in 1..indexes.len() {
-                    let (l, r) = (indexes[i - 1], indexes[i]);
-                    if let Ok(mut commit) =
-                        Parser::parse_commit(&lines[l..r], author_mappings.clone())
-                    {
-                        commit.repo = repo.name.to_string();
-                        lock.insert(commit);
-                    }
-                }
-            });
-            handles.push(handle);
+        for i in 1..indexes.len() {
+            let (l, r) = (indexes[i - 1], indexes[i]);
+            if let Ok(mut commit) = Parser::parse_commit(&lines[l..r], &author_mappings) {
+                commit.repo = repo.name.to_string();
+                data.insert(commit);
+            }
         }
 
-        for handle in handles {
-            handle.await?
-        }
-
-        let lock = mutex.lock().unwrap();
-        let data: Vec<_> = lock.iter().map(|x| x.clone()).collect();
+        let data: Vec<_> = data.into_iter().collect();
         Ok(data)
     }
 
     pub async fn snapshot(repo: &Repository) -> Result<Snapshot> {
         let lines = Git::git_log(
-            &repo,
+            repo,
             &[
                 "--no-merges",
                 "--date=rfc",
@@ -483,10 +464,10 @@ impl GitImpl {
         }
 
         let mut commit = Commit::new();
-        Parser::parse_commit_info(&mut commit, &lines[0], vec![])?;
+        Parser::parse_commit_info(&mut commit, &lines[0], None)?;
 
         let mut languages = Languages::new();
-        languages.get_statistics(&[repo.path.clone()], &vec![], &Config::default());
+        languages.get_statistics(&[repo.path.clone()], &[], &Config::default());
 
         let mut stats = vec![];
         for (ty, language) in languages {
@@ -517,7 +498,7 @@ impl GitImpl {
             let tag = &fields[1]["refs/tags/".len()..];
 
             let logs = Git::git_log(
-                &repo,
+                repo,
                 &[
                     "--no-merges",
                     "--date=rfc",
@@ -533,7 +514,7 @@ impl GitImpl {
                 continue;
             }
 
-            let commit = Parser::parse_commit(&logs, author_mappings.clone())?;
+            let commit = Parser::parse_commit(&logs, &author_mappings)?;
             records.push(Tag {
                 tag: tag.to_string(),
                 datetime: commit.datetime,
@@ -564,7 +545,7 @@ mod tests {
 261	0	stat.go
 250	0	ui.go"#;
         let lines: Vec<String> = output.split('\n').map(|line| line.to_string()).collect();
-        let commit = Parser::parse_commit(&lines, vec![]).unwrap();
+        let commit = Parser::parse_commit(&lines, &vec![]).unwrap();
 
         let author = Author {
             name: "chenjiandongx".to_string(),

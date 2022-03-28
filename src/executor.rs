@@ -490,7 +490,7 @@ fn udf_timestamp_rfc3339() -> ScalarUDF {
         let array = base
             .unwrap()
             .iter()
-            .map(|x| Some(Utc.timestamp(x.unwrap(), 0).to_rfc3339().to_string()))
+            .map(|x| Some(Utc.timestamp(x.unwrap(), 0).to_rfc3339()))
             .collect::<array::StringArray>();
         Ok(Arc::new(array) as array::ArrayRef)
     };

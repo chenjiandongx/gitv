@@ -436,7 +436,7 @@ impl ChartRender {
         ctx.insert("dependencies", &deps.list());
         ctx.insert("register", &deps.register());
 
-        let mut f = File::create(dest.clone())?;
+        let mut f = File::create(dest)?;
         let content = Tera::default().render_str(TEMPLATE_CHART, &ctx)?;
         f.write_all(self.cleanup_content(content).as_bytes())?;
         Ok(())

@@ -4,7 +4,7 @@ use async_process::Command;
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
-    fs::{self, OpenOptions},
+    fs::{self, File},
     path::Path,
     sync::{Arc, Mutex},
     time,
@@ -123,7 +123,7 @@ impl Git {
         repo: &Repository,
         command: &str,
         args: &[&str],
-        path: &Path,
+        file: File,
     ) -> Result<()> {
         let mut args = args.to_vec();
         args.insert(0, command);
@@ -134,7 +134,7 @@ impl Git {
             format!("--work-tree={}", repo.path),
         ]);
         c.args(args);
-        c.stdout(OpenOptions::new().write(true).append(true).open(path)?);
+        c.stdout(file);
         c.output().await?;
 
         Ok(())
@@ -333,7 +333,7 @@ impl GitImpl {
         Ok(())
     }
 
-    pub async fn commits(repo: &Repository, path: &Path) -> Result<()> {
+    pub async fn commits(repo: &Repository, file: File) -> Result<()> {
         Git::git_output_file(
             repo,
             "log",
@@ -344,7 +344,7 @@ impl GitImpl {
                 "--numstat",
                 "HEAD",
             ],
-            path,
+            file,
         )
         .await?;
 

@@ -2,7 +2,6 @@ use crate::{config::Repository, gitimp::Parser, AuthorMapping, CreateAction, Dat
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::DateTime;
-use crossbeam_channel::bounded;
 use serde::Serialize;
 use std::io::{prelude::*, BufReader};
 use std::{
@@ -132,28 +131,37 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        let tf = NamedTempFile::new()?;
-        let rf = tf.reopen()?;
-        let file_path = tf.path().clone();
+        let file = NamedTempFile::new()?;
+        let rf = file.reopen()?;
 
-        GitImpl::commits(&repo.clone(), file_path).await?;
+        GitImpl::commits(&repo.clone(), file.into_file()).await?;
 
-        let (lines_tx, lines_rx) = bounded::<Vec<String>>(BUFFER_SIZE);
-        let mut handles = vec![];
-        for _ in 0..num_cpus::get() {
-            let lines_rx = lines_rx.clone();
-            let repo = repo.clone();
-            let tx = tx.clone();
-            let mappings = author_mappings.clone();
+        let (lines_tx, mut lines_rx) = sync::mpsc::channel::<Vec<String>>(BUFFER_SIZE);
+        let repo = repo.clone();
+        let mappings = author_mappings.clone();
 
-            let handle: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
-                while let Ok(lines) = lines_rx.recv() {
-                    if lines.is_empty() {
-                        continue;
-                    }
+        let handle: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
+            while let Some(lines) = lines_rx.recv().await {
+                if lines.is_empty() {
+                    continue;
+                }
 
-                    let commit = Parser::parse_commit(&lines, &mappings)?;
-                    let record = RecordCommit {
+                let commit = Parser::parse_commit(&lines, &mappings)?;
+                let record = RecordCommit {
+                    hash: commit.hash.clone(),
+                    repo_name: repo.name.clone(),
+                    branch: repo.branch.clone().unwrap_or_default(),
+                    datetime: datetime_rfc339(&commit.datetime),
+                    author_name: commit.author.name.clone(),
+                    author_email: commit.author.email.clone(),
+                    author_domain: commit.author.domain(),
+                };
+                if tx.send(RecordType::Commit(record)).await.is_err() {
+                    return Ok(());
+                };
+
+                for fc in commit.changes {
+                    let record = RecordChange {
                         hash: commit.hash.clone(),
                         repo_name: repo.name.clone(),
                         branch: repo.branch.clone().unwrap_or_default(),
@@ -161,33 +169,17 @@ impl CsvSerializer {
                         author_name: commit.author.name.clone(),
                         author_email: commit.author.email.clone(),
                         author_domain: commit.author.domain(),
+                        ext: fc.ext,
+                        insertion: fc.insertion,
+                        deletion: fc.deletion,
                     };
-                    if tx.send(RecordType::Commit(record)).await.is_err() {
+                    if tx.send(RecordType::Change(record)).await.is_err() {
                         return Ok(());
                     };
-
-                    for fc in commit.changes {
-                        let record = RecordChange {
-                            hash: commit.hash.clone(),
-                            repo_name: repo.name.clone(),
-                            branch: repo.branch.clone().unwrap_or_default(),
-                            datetime: datetime_rfc339(&commit.datetime),
-                            author_name: commit.author.name.clone(),
-                            author_email: commit.author.email.clone(),
-                            author_domain: commit.author.domain(),
-                            ext: fc.ext,
-                            insertion: fc.insertion,
-                            deletion: fc.deletion,
-                        };
-                        if tx.send(RecordType::Change(record)).await.is_err() {
-                            return Ok(());
-                        };
-                    }
                 }
-                Ok(())
-            });
-            handles.push(handle);
-        }
+            }
+            Ok(())
+        });
 
         let mut content = vec![];
         let mut n = 0usize;
@@ -206,7 +198,7 @@ impl CsvSerializer {
             if line.starts_with('<') {
                 n += 1;
                 if n > 1 {
-                    if lines_tx.send(content).is_err() {
+                    if lines_tx.send(content).await.is_err() {
                         return Ok(());
                     }
                     content = vec![];
@@ -216,14 +208,12 @@ impl CsvSerializer {
             buf.clear()
         }
 
-        if lines_tx.send(content).is_err() {
+        if lines_tx.send(content).await.is_err() {
             return Ok(());
         }
 
         drop(lines_tx);
-        for handle in handles {
-            handle.await??;
-        }
+        handle.await??;
 
         Ok(())
     }

@@ -1,15 +1,18 @@
-use crate::{config::Repository, AuthorMapping, CreateAction, Database, GitImpl};
+use crate::{config::Repository, gitimp::Parser, AuthorMapping, CreateAction, Database, GitImpl};
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::DateTime;
+use crossbeam_channel::bounded;
 use serde::Serialize;
+use std::io::{prelude::*, BufReader};
 use std::{
     fs::File,
     path::Path,
     sync::{Arc, Mutex},
 };
+use tempfile::NamedTempFile;
 use tokio::{
-    sync::{self, mpsc::Sender, Semaphore},
+    sync::{self, mpsc::Sender},
     task::JoinHandle,
     time,
 };
@@ -25,6 +28,7 @@ pub enum RecordType {
 
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct RecordCommit {
+    pub hash: String,
     pub repo_name: String,
     pub branch: String,
     pub datetime: String,
@@ -41,6 +45,7 @@ impl RecordCommit {
 
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct RecordChange {
+    pub hash: String,
     pub repo_name: String,
     pub branch: String,
     pub datetime: String,
@@ -109,6 +114,8 @@ fn datetime_rfc339(datetime: &str) -> String {
     }
 }
 
+const BUFFER_SIZE: usize = 1000;
+
 /// 定义 Record 序列化接口
 #[async_trait]
 pub trait RecordSerializer {
@@ -125,19 +132,29 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        let mut handles: Vec<JoinHandle<Result<(), anyhow::Error>>> = vec![];
-        let semaphore = Arc::new(Semaphore::new(num_cpus::get()));
-        for (since, before) in GitImpl::get_commits_range(repo).await? {
-            let repo = repo.clone();
-            let mappings = author_mappings.clone();
-            let tx = tx.clone();
-            let semaphore = semaphore.clone();
+        let tf = NamedTempFile::new()?;
+        let rf = tf.reopen()?;
+        let file_path = tf.path().clone();
 
-            let handle = tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
-                let commits = GitImpl::commits(&repo, mappings, since, before).await?;
-                for commit in commits {
+        GitImpl::commits(&repo.clone(), file_path).await?;
+
+        let (lines_tx, lines_rx) = bounded::<Vec<String>>(BUFFER_SIZE);
+        let mut handles = vec![];
+        for _ in 0..num_cpus::get() {
+            let lines_rx = lines_rx.clone();
+            let repo = repo.clone();
+            let tx = tx.clone();
+            let mappings = author_mappings.clone();
+
+            let handle: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
+                while let Ok(lines) = lines_rx.recv() {
+                    if lines.is_empty() {
+                        continue;
+                    }
+
+                    let commit = Parser::parse_commit(&lines, &mappings)?;
                     let record = RecordCommit {
+                        hash: commit.hash.clone(),
                         repo_name: repo.name.clone(),
                         branch: repo.branch.clone().unwrap_or_default(),
                         datetime: datetime_rfc339(&commit.datetime),
@@ -151,6 +168,7 @@ impl CsvSerializer {
 
                     for fc in commit.changes {
                         let record = RecordChange {
+                            hash: commit.hash.clone(),
                             repo_name: repo.name.clone(),
                             branch: repo.branch.clone().unwrap_or_default(),
                             datetime: datetime_rfc339(&commit.datetime),
@@ -171,9 +189,42 @@ impl CsvSerializer {
             handles.push(handle);
         }
 
+        let mut content = vec![];
+        let mut n = 0usize;
+        let mut reader = BufReader::new(rf);
+        let mut buf = vec![];
+
+        while reader.read_until(b'\n', &mut buf).is_ok() {
+            if buf.is_empty() {
+                break;
+            }
+
+            let line = String::from_utf8_lossy(&buf).trim().to_string();
+            if line.is_empty() {
+                continue;
+            }
+            if line.starts_with('<') {
+                n += 1;
+                if n > 1 {
+                    if lines_tx.send(content).is_err() {
+                        return Ok(());
+                    }
+                    content = vec![];
+                }
+            }
+            content.push(line);
+            buf.clear()
+        }
+
+        if lines_tx.send(content).is_err() {
+            return Ok(());
+        }
+
+        drop(lines_tx);
         for handle in handles {
             handle.await??;
         }
+
         Ok(())
     }
 
@@ -272,7 +323,6 @@ impl CsvSerializer {
         author_mappings: Vec<AuthorMapping>,
         disable_pull: bool,
     ) -> Result<()> {
-        const BUFFER_SIZE: usize = 1000;
         let repos = database.load()?;
         let total = repos.len();
 

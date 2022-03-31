@@ -1,11 +1,10 @@
 use crate::{config::AuthorMapping, Author, Repository};
 use anyhow::{anyhow, Result};
 use async_process::Command;
-use chrono::{DateTime, TimeZone, Utc};
 use lazy_static::lazy_static;
 use std::{
-    collections::{HashMap, HashSet},
-    fs,
+    collections::HashMap,
+    fs::{self, OpenOptions},
     path::Path,
     sync::{Arc, Mutex},
     time,
@@ -120,6 +119,27 @@ impl Git {
         Ok(lines)
     }
 
+    async fn git_output_file(
+        repo: &Repository,
+        command: &str,
+        args: &[&str],
+        path: &Path,
+    ) -> Result<()> {
+        let mut args = args.to_vec();
+        args.insert(0, command);
+
+        let mut c = Command::new("git");
+        c.args(&[
+            format!("--git-dir={}/.git", repo.path),
+            format!("--work-tree={}", repo.path),
+        ]);
+        c.args(args);
+        c.stdout(OpenOptions::new().write(true).append(true).open(path)?);
+        c.output().await?;
+
+        Ok(())
+    }
+
     async fn git_clone(repo: &Repository) -> Result<()> {
         if let Some(p) = Path::new(&repo.path).parent() {
             fs::create_dir_all(p)?
@@ -146,17 +166,13 @@ impl Git {
         Self::git(repo, "show-ref", args, '\n').await
     }
 
-    async fn git_rev_list(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
-        Self::git(repo, "rev-list", args, '\n').await
-    }
-
     async fn git_checkout(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
         Self::git(repo, "checkout", args, '\u{0}').await
     }
 }
 
 /// Parser 负责解析 git 命令输出
-struct Parser;
+pub struct Parser;
 
 impl Parser {
     fn parse_commit_info(
@@ -244,7 +260,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_commit(lines: &[String], author_mappings: &[AuthorMapping]) -> Result<Commit> {
+    pub fn parse_commit(lines: &[String], author_mappings: &[AuthorMapping]) -> Result<Commit> {
         let mut commit = Commit::new();
         Self::parse_commit_info(&mut commit, &lines[0], Some(author_mappings))?;
         Self::parse_commit_changes(&mut commit, &lines[1..])?;
@@ -254,78 +270,6 @@ impl Parser {
 
 #[derive(Copy, Clone)]
 pub struct GitImpl;
-
-impl GitImpl {
-    pub async fn get_commits_range(repo: &Repository) -> Result<Vec<(String, String)>> {
-        let lines = Git::git_rev_list(repo, &["--max-parents=0", "HEAD"]).await?;
-        if lines.is_empty() {
-            return Err(anyhow!("Empty git-rev-list output"));
-        }
-        let lines = Git::git_log(
-            repo,
-            &[
-                "--date=rfc",
-                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                &lines[0],
-            ],
-        )
-        .await?;
-        if lines.is_empty() {
-            return Err(anyhow!("Failed to get first commit detailed"));
-        }
-        let mut first_commit = Commit::new();
-        Parser::parse_commit_info(&mut first_commit, &lines[0], None)?;
-
-        let lines = Git::git_log(
-            repo,
-            &[
-                "--date=rfc",
-                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                "HEAD",
-            ],
-        )
-        .await?;
-        if lines.is_empty() {
-            return Err(anyhow!("Failed to get last commit detailed"));
-        }
-        let mut last_commit = Commit::new();
-        Parser::parse_commit_info(&mut last_commit, &lines[0], None)?;
-
-        let first_ts = DateTime::parse_from_rfc2822(&first_commit.datetime)?.timestamp();
-        let last_ts = DateTime::parse_from_rfc2822(&last_commit.datetime)?.timestamp();
-
-        const DURATION: i64 = 3600 * 24 * 120; // 120days
-        let data = Self::calc_range(DURATION, first_ts, last_ts);
-
-        if data.len() == 1 {
-            let first = &data[0];
-            if first.0 == first.1 {
-                return Ok(vec![(String::new(), String::new())]);
-            }
-        }
-        Ok(data)
-    }
-
-    fn calc_range(duration: i64, mut start: i64, end: i64) -> Vec<(String, String)> {
-        let format = "%Y-%m-%d";
-        let mut data: Vec<(String, String)> = vec![];
-        while start + duration <= end {
-            data.push((
-                Utc.timestamp(start, 0).format(format).to_string(),
-                Utc.timestamp(start + duration, 0)
-                    .format(format)
-                    .to_string(),
-            ));
-            start += duration;
-        }
-        data.push((
-            Utc.timestamp(start, 0).format(format).to_string(),
-            Utc.timestamp(end, 0).format(format).to_string(),
-        ));
-
-        data
-    }
-}
 
 impl GitImpl {
     pub async fn clone_or_pull(repos: Vec<Repository>, disable_pull: bool) -> Result<()> {
@@ -389,59 +333,22 @@ impl GitImpl {
         Ok(())
     }
 
-    pub async fn commits(
-        repo: &Repository,
-        author_mappings: Vec<AuthorMapping>,
-        since: String,
-        before: String,
-    ) -> Result<Vec<Commit>> {
-        let mut data = HashSet::new();
-        let lines = if since.is_empty() && before.is_empty() {
-            Git::git_log(
-                repo,
-                &[
-                    "--no-merges",
-                    "--date=rfc",
-                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                    "--numstat",
-                    "HEAD",
-                ],
-            )
-            .await?
-        } else {
-            Git::git_log(
-                repo,
-                &[
-                    "--no-merges",
-                    "--date=rfc",
-                    &format!("--since={}", since),
-                    &format!("--before={}", before),
-                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                    "--numstat",
-                    "HEAD",
-                ],
-            )
-            .await?
-        };
+    pub async fn commits(repo: &Repository, path: &Path) -> Result<()> {
+        Git::git_output_file(
+            repo,
+            "log",
+            &[
+                "--no-merges",
+                "--date=rfc",
+                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                "--numstat",
+                "HEAD",
+            ],
+            path,
+        )
+        .await?;
 
-        let mut indexes = vec![];
-        for (idx, line) in lines.iter().enumerate() {
-            if line.starts_with('<') {
-                indexes.push(idx);
-            }
-        }
-        indexes.push(lines.len());
-
-        for i in 1..indexes.len() {
-            let (l, r) = (indexes[i - 1], indexes[i]);
-            if let Ok(mut commit) = Parser::parse_commit(&lines[l..r], &author_mappings) {
-                commit.repo = repo.name.to_string();
-                data.insert(commit);
-            }
-        }
-
-        let data: Vec<_> = data.into_iter().collect();
-        Ok(data)
+        Ok(())
     }
 
     pub async fn snapshot(repo: &Repository) -> Result<Snapshot> {
@@ -558,21 +465,5 @@ mod tests {
         let changes = commit.changes;
         assert_eq!(0, changes.iter().map(|c| c.deletion).sum::<usize>());
         assert_eq!(1588, changes.iter().map(|c| c.insertion).sum::<usize>());
-    }
-
-    #[test]
-    fn test_calc_range() {
-        let duration: i64 = 3600 * 24;
-        let start: i64 = 1647432000;
-        let end: i64 = 1647432000 + (duration * 3) + 720;
-
-        let range = GitImpl::calc_range(duration, start, end);
-        let excepted = vec![
-            (String::from("2022-03-16"), String::from("2022-03-17")),
-            (String::from("2022-03-17"), String::from("2022-03-18")),
-            (String::from("2022-03-18"), String::from("2022-03-19")),
-            (String::from("2022-03-19"), String::from("2022-03-19")),
-        ];
-        assert_eq!(excepted, range);
     }
 }

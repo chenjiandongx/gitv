@@ -18,11 +18,13 @@ async-process = "1"
 async-trait = "0.1"
 chrono = "0.4"
 clap = {version = "3.1.5", features = ["derive"]}
+crossbeam-channel = "0.5"
 csv = "1.1"
 datafusion = "7"
 dirs = "4.0"
 humantime = "2"
 lazy_static = "1"
+num_cpus = "1.0"
 rand = "0.8"
 regex = "1"
 reqwest = {version = "0.11", features = ["json"]}

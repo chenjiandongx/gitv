@@ -4,7 +4,7 @@ use async_process::Command;
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
-    fs::{self, File},
+    fs,
     path::Path,
     sync::{Arc, Mutex},
     time,
@@ -119,27 +119,6 @@ impl Git {
         Ok(lines)
     }
 
-    async fn git_output_file(
-        repo: &Repository,
-        command: &str,
-        args: &[&str],
-        file: File,
-    ) -> Result<()> {
-        let mut args = args.to_vec();
-        args.insert(0, command);
-
-        let mut c = Command::new("git");
-        c.args(&[
-            format!("--git-dir={}/.git", repo.path),
-            format!("--work-tree={}", repo.path),
-        ]);
-        c.args(args);
-        c.stdout(file);
-        c.output().await?;
-
-        Ok(())
-    }
-
     async fn git_clone(repo: &Repository) -> Result<()> {
         if let Some(p) = Path::new(&repo.path).parent() {
             fs::create_dir_all(p)?
@@ -167,12 +146,12 @@ impl Git {
     }
 
     async fn git_checkout(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
-        Self::git(repo, "checkout", args, '\u{0}').await
+        Self::git(repo, "checkout", args, '\n').await
     }
 }
 
 /// Parser 负责解析 git 命令输出
-pub struct Parser;
+struct Parser;
 
 impl Parser {
     fn parse_commit_info(
@@ -260,7 +239,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse_commit(lines: &[String], author_mappings: &[AuthorMapping]) -> Result<Commit> {
+    fn parse_commit(lines: &[String], author_mappings: &[AuthorMapping]) -> Result<Commit> {
         let mut commit = Commit::new();
         Self::parse_commit_info(&mut commit, &lines[0], Some(author_mappings))?;
         Self::parse_commit_changes(&mut commit, &lines[1..])?;
@@ -270,6 +249,12 @@ impl Parser {
 
 #[derive(Copy, Clone)]
 pub struct GitImpl;
+
+impl GitImpl {
+    pub async fn get_commits_range(repo: &Repository) -> Result<Vec<String>> {
+        Ok(Git::git_log(repo, &["--no-merges", "--pretty=format:%H", "HEAD"]).await?)
+    }
+}
 
 impl GitImpl {
     pub async fn clone_or_pull(repos: Vec<Repository>, disable_pull: bool) -> Result<()> {
@@ -333,22 +318,26 @@ impl GitImpl {
         Ok(())
     }
 
-    pub async fn commits(repo: &Repository, file: File) -> Result<()> {
-        Git::git_output_file(
+    pub async fn commit(
+        repo: &Repository,
+        author_mappings: Vec<AuthorMapping>,
+        hash: String,
+    ) -> Result<Commit> {
+        let lines = Git::git_log(
             repo,
-            "log",
             &[
                 "--no-merges",
                 "--date=rfc",
                 "--pretty=format:<%ad> <%H> <%aN> <%aE>",
                 "--numstat",
-                "HEAD",
+                hash.as_str(),
+                "-n",
+                "1",
             ],
-            file,
         )
         .await?;
 
-        Ok(())
+        Ok(Parser::parse_commit(&lines, &author_mappings)?)
     }
 
     pub async fn snapshot(repo: &Repository) -> Result<Snapshot> {

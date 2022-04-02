@@ -1,7 +1,7 @@
 use crate::{config::AuthorMapping, Author, Repository};
 use anyhow::{anyhow, Result};
-use async_process::Command;
 use lazy_static::lazy_static;
+use std::process::Command;
 use std::{
     collections::HashMap,
     fs,
@@ -93,7 +93,7 @@ lazy_static! {
 struct Git;
 
 impl Git {
-    async fn git(
+    fn git(
         repo: &Repository,
         command: &str,
         args: &[&str],
@@ -109,7 +109,7 @@ impl Git {
         ]);
         c.args(args);
 
-        let out = c.output().await?.stdout;
+        let out = c.output()?.stdout;
         let lines = String::from_utf8_lossy(&out)
             .split(delimiter)
             .filter(|x| !x.is_empty())
@@ -119,34 +119,37 @@ impl Git {
         Ok(lines)
     }
 
-    async fn git_clone(repo: &Repository) -> Result<()> {
+    fn git_clone(repo: &Repository) -> Result<()> {
         if let Some(p) = Path::new(&repo.path).parent() {
             fs::create_dir_all(p)?
         }
 
         let mut c = Command::new("git");
         if repo.remote.is_some() {
-            c.args(&["clone", repo.remote.as_ref().unwrap(), repo.path.as_str()])
-                .output()
-                .await?;
+            c.args(&[
+                "clone",
+                &repo.remote.clone().unwrap_or_default(),
+                repo.path.as_str(),
+            ])
+            .output()?;
         }
         Ok(())
     }
 
-    async fn git_pull(repo: &Repository) -> Result<Vec<String>> {
-        Self::git(repo, "pull", &[], '\n').await
+    fn git_pull(repo: &Repository) -> Result<Vec<String>> {
+        Self::git(repo, "pull", &[], '\n')
     }
 
-    async fn git_log(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
-        Self::git(repo, "log", args, '\n').await
+    fn git_log(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        Self::git(repo, "log", args, '\n')
     }
 
-    async fn git_show_ref(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
-        Self::git(repo, "show-ref", args, '\n').await
+    fn git_show_ref(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        Self::git(repo, "show-ref", args, '\n')
     }
 
-    async fn git_checkout(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
-        Self::git(repo, "checkout", args, '\n').await
+    fn git_checkout(repo: &Repository, args: &[&str]) -> Result<Vec<String>> {
+        Self::git(repo, "checkout", args, '\n')
     }
 }
 
@@ -247,12 +250,14 @@ impl Parser {
     }
 }
 
+pub static COMMIT_BATCH: usize = 1;
+
 #[derive(Copy, Clone)]
 pub struct GitImpl;
 
 impl GitImpl {
-    pub async fn get_commits_range(repo: &Repository) -> Result<Vec<String>> {
-        Ok(Git::git_log(repo, &["--no-merges", "--pretty=format:%H", "HEAD"]).await?)
+    pub fn commits_hash(repo: &Repository) -> Result<Vec<String>> {
+        Git::git_log(repo, &["--no-merges", "--pretty=format:%H", "HEAD"])
     }
 }
 
@@ -270,7 +275,7 @@ impl GitImpl {
                 let now = time::Instant::now();
                 if Path::new(&repo.path).exists() {
                     if !disable_pull {
-                        Git::git_pull(&repo).await?;
+                        Git::git_pull(&repo)?;
                         let mut lock = mutex.lock().unwrap();
                         *lock += 1;
                         let n = *lock;
@@ -284,7 +289,7 @@ impl GitImpl {
                         )
                     }
                 } else {
-                    Git::git_clone(&repo).await?;
+                    Git::git_clone(&repo)?;
                     let mut lock = mutex.lock().unwrap();
                     *lock += 1;
                     let n = *lock;
@@ -308,21 +313,21 @@ impl GitImpl {
         Ok(())
     }
 
-    pub async fn checkout(repo: &Repository) -> Result<()> {
+    pub fn checkout(repo: &Repository) -> Result<()> {
         if repo.branch.is_some() {
             let branch = repo.branch.clone().unwrap();
             if !branch.is_empty() {
-                Git::git_checkout(repo, &[&branch]).await?;
+                Git::git_checkout(repo, &[&branch])?;
             }
         }
         Ok(())
     }
 
-    pub async fn commit(
+    pub fn commits(
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
-        hash: String,
-    ) -> Result<Commit> {
+        hash: &str,
+    ) -> Result<Vec<Commit>> {
         let lines = Git::git_log(
             repo,
             &[
@@ -330,17 +335,32 @@ impl GitImpl {
                 "--date=rfc",
                 "--pretty=format:<%ad> <%H> <%aN> <%aE>",
                 "--numstat",
-                hash.as_str(),
+                hash,
                 "-n",
-                "1",
+                &COMMIT_BATCH.to_string(),
             ],
-        )
-        .await?;
+        )?;
 
-        Ok(Parser::parse_commit(&lines, &author_mappings)?)
+        let mut indexes = vec![];
+        for (idx, line) in lines.iter().enumerate() {
+            if line.starts_with('<') {
+                indexes.push(idx);
+            }
+        }
+        indexes.push(lines.len());
+
+        let mut data = vec![];
+        for i in 1..indexes.len() {
+            let (l, r) = (indexes[i - 1], indexes[i]);
+            if let Ok(commit) = Parser::parse_commit(&lines[l..r], &author_mappings) {
+                data.push(commit);
+            }
+        }
+
+        Ok(data)
     }
 
-    pub async fn snapshot(repo: &Repository) -> Result<Snapshot> {
+    pub fn snapshot(repo: &Repository) -> Result<Snapshot> {
         let lines = Git::git_log(
             repo,
             &[
@@ -349,8 +369,7 @@ impl GitImpl {
                 "--pretty=format:<%ad> <%H> <%aN> <%aE>",
                 "HEAD",
             ],
-        )
-        .await?;
+        )?;
 
         if lines.is_empty() {
             return Err(anyhow!("Failed to get commit detailed"));
@@ -378,9 +397,9 @@ impl GitImpl {
         })
     }
 
-    pub async fn tags(repo: &Repository, author_mappings: Vec<AuthorMapping>) -> Result<Vec<Tag>> {
+    pub fn tags(repo: &Repository, author_mappings: Vec<AuthorMapping>) -> Result<Vec<Tag>> {
         let mut records = vec![];
-        let lines = Git::git_show_ref(repo, &["--tags"]).await?;
+        let lines = Git::git_show_ref(repo, &["--tags"])?;
         for line in lines {
             let fields: Vec<String> = line.splitn(2, ' ').map(|x| x.to_string()).collect();
             if fields.len() < 2 {
@@ -400,8 +419,7 @@ impl GitImpl {
                     "1",
                     hash,
                 ],
-            )
-            .await?;
+            )?;
 
             if logs.is_empty() {
                 continue;

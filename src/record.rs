@@ -1,8 +1,7 @@
-use crate::{config::Repository, AuthorMapping, CreateAction, Database, GitImpl};
+use crate::{config::Repository, gitimp::*, AuthorMapping, CreateAction, Database, GitImpl};
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::DateTime;
-use crossbeam_channel::bounded;
 use serde::Serialize;
 use std::{
     fs::File,
@@ -27,6 +26,7 @@ pub enum RecordType {
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct RecordCommit {
     pub repo_name: String,
+    pub hash: String,
     pub branch: String,
     pub datetime: String,
     pub author_name: String,
@@ -116,6 +116,8 @@ pub trait RecordSerializer {
     async fn serialize(config: CreateAction) -> Result<()>;
 }
 
+const BUFFER_SIZE: usize = 1000;
+
 /// Csv 序列化实现
 #[derive(Debug)]
 pub struct CsvSerializer;
@@ -126,46 +128,56 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        let (lines_tx, lines_rx) = bounded::<String>(1000);
-        let hashs = GitImpl::get_commits_range(repo).await?;
+        let concurrency = num_cpus::get();
+
+        let mut txs = vec![];
+        let mut rxs = vec![];
+        for _ in 0..concurrency {
+            let ch = sync::mpsc::channel::<String>(BUFFER_SIZE);
+            txs.push(ch.0);
+            rxs.push(ch.1);
+        }
 
         let mut handles = vec![];
-        for _ in 0..num_cpus::get() {
+        for _ in 0..concurrency {
             let repo = repo.clone();
             let mappings = author_mappings.clone();
             let tx = tx.clone();
-            let lines_rx = lines_rx.clone();
+            let mut lines_rx = rxs.remove(0);
 
             let handle: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
-                while let Ok(hash) = lines_rx.recv() {
-                    let commit = GitImpl::commit(&repo, mappings.clone(), hash).await?;
-                    let record = RecordCommit {
-                        repo_name: repo.name.clone(),
-                        branch: repo.branch.clone().unwrap_or_default(),
-                        datetime: datetime_rfc339(&commit.datetime),
-                        author_name: commit.author.name.clone(),
-                        author_email: commit.author.email.clone(),
-                        author_domain: commit.author.domain(),
-                    };
-                    if tx.send(RecordType::Commit(record)).await.is_err() {
-                        return Ok(());
-                    };
-
-                    for fc in commit.changes {
-                        let record = RecordChange {
+                while let Some(hash) = lines_rx.recv().await {
+                    let commits = GitImpl::commits(&repo, mappings.clone(), &hash)?;
+                    for commit in commits {
+                        let record = RecordCommit {
                             repo_name: repo.name.clone(),
+                            hash: commit.hash,
                             branch: repo.branch.clone().unwrap_or_default(),
                             datetime: datetime_rfc339(&commit.datetime),
                             author_name: commit.author.name.clone(),
                             author_email: commit.author.email.clone(),
                             author_domain: commit.author.domain(),
-                            ext: fc.ext,
-                            insertion: fc.insertion,
-                            deletion: fc.deletion,
                         };
-                        if tx.send(RecordType::Change(record)).await.is_err() {
+                        if tx.send(RecordType::Commit(record)).await.is_err() {
                             return Ok(());
                         };
+
+                        for fc in commit.changes {
+                            let record = RecordChange {
+                                repo_name: repo.name.clone(),
+                                branch: repo.branch.clone().unwrap_or_default(),
+                                datetime: datetime_rfc339(&commit.datetime),
+                                author_name: commit.author.name.clone(),
+                                author_email: commit.author.email.clone(),
+                                author_domain: commit.author.domain(),
+                                ext: fc.ext,
+                                insertion: fc.insertion,
+                                deletion: fc.deletion,
+                            };
+                            if tx.send(RecordType::Change(record)).await.is_err() {
+                                return Ok(());
+                            };
+                        }
                     }
                 }
                 Ok(())
@@ -173,10 +185,16 @@ impl CsvSerializer {
             handles.push(handle);
         }
 
-        for hash in hashs {
-            lines_tx.send(hash)?;
+        let mut n = 0;
+        for (idx, hash) in GitImpl::commits_hash(repo)?.into_iter().enumerate() {
+            if idx % COMMIT_BATCH == 0 {
+                txs[n % concurrency].send(hash).await?;
+                n += 1;
+            }
         }
-        drop(lines_tx);
+        for tx in txs.into_iter().take(concurrency) {
+            drop(tx);
+        }
 
         for handle in handles {
             handle.await??;
@@ -189,7 +207,7 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
-        for tag in GitImpl::tags(repo, author_mappings).await? {
+        for tag in GitImpl::tags(repo, author_mappings)? {
             let record = RecordTag {
                 repo_name: repo.name.clone(),
                 datetime: datetime_rfc339(&tag.datetime),
@@ -204,7 +222,7 @@ impl CsvSerializer {
     }
 
     async fn serialize_snapshot(tx: Sender<RecordType>, repo: &Repository) -> Result<()> {
-        let snapshot = GitImpl::snapshot(repo).await?;
+        let snapshot = GitImpl::snapshot(repo)?;
         for stat in snapshot.stats {
             let record = RecordSnapshot {
                 repo_name: repo.name.clone(),
@@ -279,7 +297,6 @@ impl CsvSerializer {
         author_mappings: Vec<AuthorMapping>,
         disable_pull: bool,
     ) -> Result<()> {
-        const BUFFER_SIZE: usize = 1000;
         let repos = database.load()?;
         let total = repos.len();
 
@@ -296,7 +313,7 @@ impl CsvSerializer {
 
             let handle = tokio::spawn(async move {
                 let now = time::Instant::now();
-                GitImpl::checkout(&repo).await?;
+                GitImpl::checkout(&repo)?;
                 Self::analyze_repo(tx.clone(), &repo, mappings).await?;
 
                 let mut lock = mutex.lock().unwrap();

@@ -43,6 +43,7 @@ impl RecordCommit {
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct RecordChange {
     pub repo_name: String,
+    pub hash: String,
     pub branch: String,
     pub datetime: String,
     pub author_name: String,
@@ -151,7 +152,7 @@ impl CsvSerializer {
                     for commit in commits {
                         let record = RecordCommit {
                             repo_name: repo.name.clone(),
-                            hash: commit.hash,
+                            hash: commit.hash.clone(),
                             branch: repo.branch.clone().unwrap_or_default(),
                             datetime: datetime_rfc339(&commit.datetime),
                             author_name: commit.author.name.clone(),
@@ -165,6 +166,7 @@ impl CsvSerializer {
                         for fc in commit.changes {
                             let record = RecordChange {
                                 repo_name: repo.name.clone(),
+                                hash: commit.hash.clone(),
                                 branch: repo.branch.clone().unwrap_or_default(),
                                 datetime: datetime_rfc339(&commit.datetime),
                                 author_name: commit.author.name.clone(),

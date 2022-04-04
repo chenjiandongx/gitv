@@ -143,11 +143,9 @@ pub struct Display {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Dependency {
     chartjs: String,
-    stacked100: String,
     datalabels: String,
 }
 
-static REGISTER_STACKED100: &str = "Chart.register(ChartjsPluginStacked100)";
 static REGISTER_DATALABELS: &str = "Chart.register(ChartDataLabels)";
 
 impl Dependency {
@@ -158,9 +156,6 @@ impl Dependency {
         } else {
             data.push(self.chartjs.clone())
         }
-        if !self.stacked100.is_empty() {
-            data.push(self.stacked100.clone())
-        }
         if !self.datalabels.is_empty() {
             data.push(self.datalabels.clone())
         }
@@ -169,9 +164,6 @@ impl Dependency {
 
     pub fn register(&self) -> Vec<&'static str> {
         let mut data = vec![];
-        if !self.stacked100.is_empty() {
-            data.push(REGISTER_STACKED100);
-        }
         if !self.datalabels.is_empty() {
             data.push(REGISTER_DATALABELS);
         }
@@ -180,14 +172,12 @@ impl Dependency {
 }
 
 static DEPENDENCY_CHARTJS: &str = "https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js";
-static DEPENDENCY_STACKED100: &str = "https://cdn.jsdelivr.net/npm/chartjs-plugin-stacked100@1.0";
 static DEPENDENCY_DATALABELS: &str = "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0";
 
 impl Default for Dependency {
     fn default() -> Self {
         Self {
             chartjs: String::from(DEPENDENCY_CHARTJS),
-            stacked100: String::from(DEPENDENCY_STACKED100),
             datalabels: String::from(DEPENDENCY_DATALABELS),
         }
     }

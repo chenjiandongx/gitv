@@ -229,7 +229,7 @@ impl Parser {
                         change.ext = p.extension().unwrap().to_str().unwrap().to_string();
                         let n = change.ext.len() as usize - 1;
                         if let Some(cs) = change.ext.chars().nth(n) {
-                            if cs.is_ascii_alphanumeric() {
+                            if !cs.is_ascii_alphanumeric() {
                                 change.ext.remove(n);
                             }
                         }

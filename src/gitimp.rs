@@ -1,5 +1,6 @@
 use crate::{config::AuthorMapping, Author, Repository};
 use anyhow::{anyhow, Result};
+use chrono::DateTime;
 use lazy_static::lazy_static;
 use std::process::Command;
 use std::{
@@ -22,11 +23,23 @@ pub struct Commit {
     /// 提交作者
     pub author: Author,
     /// 提交日期
-    pub datetime: String,
+    pub datetime: RfcDateTime,
     /// 变动文件数
     pub change_files: i64,
     /// 文件变更记录
     pub changes: Vec<FileExtChange>,
+}
+
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
+pub struct RfcDateTime(String);
+
+impl RfcDateTime {
+    pub fn to_rfc339(&self) -> String {
+        match DateTime::parse_from_rfc2822(&self.0) {
+            Ok(t) => t.to_rfc3339(),
+            Err(_) => String::new(),
+        }
+    }
 }
 
 impl Commit {
@@ -58,13 +71,13 @@ pub struct Tag {
     /// 版本号
     pub tag: String,
     /// 提交时间
-    pub datetime: String,
+    pub datetime: RfcDateTime,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Snapshot {
     /// 提交时间
-    pub datetime: String,
+    pub datetime: RfcDateTime,
     /// 文件统计数据
     pub stats: Vec<FileExtStat>,
 }
@@ -172,7 +185,7 @@ impl Parser {
         for i in 0..caps.len() {
             let cap = caps.get(i).unwrap().as_str().to_string();
             match i {
-                1 => commit.datetime = cap,
+                1 => commit.datetime = RfcDateTime(cap),
                 2 => commit.hash = cap,
                 3 => commit.author.name = cap,
                 4 => commit.author.email = cap,
@@ -250,8 +263,6 @@ impl Parser {
     }
 }
 
-pub static COMMIT_BATCH: usize = 1;
-
 #[derive(Copy, Clone)]
 pub struct GitImpl;
 
@@ -325,21 +336,34 @@ impl GitImpl {
 
     pub fn commits(
         repo: &Repository,
-        author_mappings: Vec<AuthorMapping>,
+        author_mappings: &[AuthorMapping],
         hash: &str,
     ) -> Result<Vec<Commit>> {
-        let lines = Git::git_log(
-            repo,
-            &[
-                "--no-merges",
-                "--date=rfc",
-                "--pretty=format:<%ad> <%H> <%aN> <%aE>",
-                "--numstat",
-                hash,
-                "-n",
-                &COMMIT_BATCH.to_string(),
-            ],
-        )?;
+        let lines = if hash.is_empty() {
+            Git::git_log(
+                repo,
+                &[
+                    "--no-merges",
+                    "--date=rfc",
+                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                    "--numstat",
+                    "HEAD",
+                ],
+            )?
+        } else {
+            Git::git_log(
+                repo,
+                &[
+                    "--no-merges",
+                    "--date=rfc",
+                    "--pretty=format:<%ad> <%H> <%aN> <%aE>",
+                    "--numstat",
+                    hash,
+                    "-n",
+                    "1",
+                ],
+            )?
+        };
 
         let mut indexes = vec![];
         for (idx, line) in lines.iter().enumerate() {
@@ -352,7 +376,7 @@ impl GitImpl {
         let mut data = vec![];
         for i in 1..indexes.len() {
             let (l, r) = (indexes[i - 1], indexes[i]);
-            if let Ok(commit) = Parser::parse_commit(&lines[l..r], &author_mappings) {
+            if let Ok(commit) = Parser::parse_commit(&lines[l..r], author_mappings) {
                 data.push(commit);
             }
         }
@@ -464,7 +488,7 @@ mod tests {
         };
         assert_eq!(commit.author, author);
         assert_eq!("qq.com".to_string(), author.domain());
-        assert_eq!("Mon Nov 8 23:34:49 2021 +0800", commit.datetime);
+        assert_eq!("Mon Nov 8 23:34:49 2021 +0800", commit.datetime.to_rfc339());
         assert_eq!("414915edea035738cc314c8ffab7eccf4e608045", commit.hash);
         assert_eq!(12, commit.change_files);
         assert_eq!(5, commit.changes.len());

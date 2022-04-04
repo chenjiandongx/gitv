@@ -1,7 +1,6 @@
 use crate::{config::Repository, gitimp::*, AuthorMapping, CreateAction, Database, GitImpl};
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::DateTime;
 use serde::Serialize;
 use std::{
     fs::File,
@@ -104,13 +103,6 @@ impl RecordActive {
     }
 }
 
-fn datetime_rfc339(datetime: &str) -> String {
-    match DateTime::parse_from_rfc2822(datetime) {
-        Ok(t) => t.to_rfc3339(),
-        Err(_) => String::new(),
-    }
-}
-
 /// 定义 Record 序列化接口
 #[async_trait]
 pub trait RecordSerializer {
@@ -124,10 +116,51 @@ const BUFFER_SIZE: usize = 1000;
 pub struct CsvSerializer;
 
 impl CsvSerializer {
-    async fn serialize_commits(
+    async fn send_commit_records(
+        tx: &Sender<RecordType>,
+        repo: &Repository,
+        commits: Vec<Commit>,
+    ) -> Result<()> {
+        for commit in commits {
+            let record = RecordCommit {
+                repo_name: repo.name.clone(),
+                hash: commit.hash.clone(),
+                branch: repo.branch.clone().unwrap_or_default(),
+                datetime: commit.datetime.to_rfc339(),
+                author_name: commit.author.name.clone(),
+                author_email: commit.author.email.clone(),
+                author_domain: commit.author.domain(),
+            };
+            if tx.send(RecordType::Commit(record)).await.is_err() {
+                return Ok(());
+            };
+
+            for fc in commit.changes {
+                let record = RecordChange {
+                    repo_name: repo.name.clone(),
+                    hash: commit.hash.clone(),
+                    branch: repo.branch.clone().unwrap_or_default(),
+                    datetime: commit.datetime.to_rfc339(),
+                    author_name: commit.author.name.clone(),
+                    author_email: commit.author.email.clone(),
+                    author_domain: commit.author.domain(),
+                    ext: fc.ext,
+                    insertion: fc.insertion,
+                    deletion: fc.deletion,
+                };
+                if tx.send(RecordType::Change(record)).await.is_err() {
+                    return Ok(());
+                };
+            }
+        }
+        Ok(())
+    }
+
+    async fn serialize_commits_sectional(
         tx: Sender<RecordType>,
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
+        hashs: Vec<String>,
     ) -> Result<()> {
         let concurrency = num_cpus::get();
 
@@ -148,58 +181,39 @@ impl CsvSerializer {
 
             let handle: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
                 while let Some(hash) = lines_rx.recv().await {
-                    let commits = GitImpl::commits(&repo, mappings.clone(), &hash)?;
-                    for commit in commits {
-                        let record = RecordCommit {
-                            repo_name: repo.name.clone(),
-                            hash: commit.hash.clone(),
-                            branch: repo.branch.clone().unwrap_or_default(),
-                            datetime: datetime_rfc339(&commit.datetime),
-                            author_name: commit.author.name.clone(),
-                            author_email: commit.author.email.clone(),
-                            author_domain: commit.author.domain(),
-                        };
-                        if tx.send(RecordType::Commit(record)).await.is_err() {
-                            return Ok(());
-                        };
-
-                        for fc in commit.changes {
-                            let record = RecordChange {
-                                repo_name: repo.name.clone(),
-                                hash: commit.hash.clone(),
-                                branch: repo.branch.clone().unwrap_or_default(),
-                                datetime: datetime_rfc339(&commit.datetime),
-                                author_name: commit.author.name.clone(),
-                                author_email: commit.author.email.clone(),
-                                author_domain: commit.author.domain(),
-                                ext: fc.ext,
-                                insertion: fc.insertion,
-                                deletion: fc.deletion,
-                            };
-                            if tx.send(RecordType::Change(record)).await.is_err() {
-                                return Ok(());
-                            };
-                        }
-                    }
+                    let commits = GitImpl::commits(&repo, &mappings, &hash)?;
+                    Self::send_commit_records(&tx, &repo, commits).await?;
                 }
                 Ok(())
             });
             handles.push(handle);
         }
 
-        let mut n = 0;
-        for (idx, hash) in GitImpl::commits_hash(repo)?.into_iter().enumerate() {
-            if idx % COMMIT_BATCH == 0 {
-                txs[n % concurrency].send(hash).await?;
-                n += 1;
-            }
+        for (idx, hash) in hashs.into_iter().enumerate() {
+            txs[idx % concurrency].send(hash).await?;
         }
+
         for tx in txs.into_iter().take(concurrency) {
             drop(tx);
         }
 
         for handle in handles {
             handle.await??;
+        }
+        Ok(())
+    }
+
+    async fn serialize_commits(
+        tx: Sender<RecordType>,
+        repo: &Repository,
+        author_mappings: Vec<AuthorMapping>,
+    ) -> Result<()> {
+        let hashs = GitImpl::commits_hash(repo)?;
+        if hashs.len() > 5000 {
+            Self::serialize_commits_sectional(tx, repo, author_mappings, hashs).await?
+        } else {
+            let commits = GitImpl::commits(repo, &author_mappings, "")?;
+            Self::send_commit_records(&tx, repo, commits).await?;
         }
         Ok(())
     }
@@ -212,7 +226,7 @@ impl CsvSerializer {
         for tag in GitImpl::tags(repo, author_mappings)? {
             let record = RecordTag {
                 repo_name: repo.name.clone(),
-                datetime: datetime_rfc339(&tag.datetime),
+                datetime: tag.datetime.to_rfc339(),
                 tag: tag.tag,
                 branch: repo.branch.clone().unwrap_or_default(),
             };
@@ -229,7 +243,7 @@ impl CsvSerializer {
             let record = RecordSnapshot {
                 repo_name: repo.name.clone(),
                 branch: repo.branch.clone().unwrap_or_default(),
-                datetime: datetime_rfc339(&snapshot.datetime),
+                datetime: snapshot.datetime.to_rfc339(),
                 ext: stat.ext,
                 code: stat.code,
                 comments: stat.comments,

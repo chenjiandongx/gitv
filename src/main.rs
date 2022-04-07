@@ -13,7 +13,7 @@ use executor::*;
 use fetcher::*;
 use gitimp::*;
 use record::*;
-use std::process::exit;
+use std::{fs::File, io::Write, process::exit};
 
 #[derive(Debug, Parser)]
 #[clap(version, about, long_about = None)]
@@ -34,15 +34,38 @@ struct Cli {
     #[clap(short, long)]
     shell: bool,
 
+    /// Generate a default config file (default: gitv.default.yaml)
+    #[clap(short, long)]
+    gernerate: bool,
+
     /// config file path (default: gitv.yaml)
     path: Option<String>,
 }
 
+static DEFAULT_CONFIG: &str = include_str!("../static/gitv.default.yaml");
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli: Cli = Cli::parse();
-    if !cli.create && !cli.fetch && !cli.render && !cli.shell {
+    if !cli.create && !cli.fetch && !cli.render && !cli.shell && !cli.gernerate {
         Cli::command().print_help().unwrap();
+        exit(0)
+    }
+
+    if cli.gernerate {
+        let p = &cli.path.unwrap_or_else(|| "gitv.default.yaml".to_string());
+        let mut f = match File::create(p) {
+            Err(e) => {
+                println!("Create config file error: {}", e);
+                exit(1)
+            }
+            Ok(f) => f,
+        };
+
+        if let Err(e) = f.write_all(DEFAULT_CONFIG.as_bytes()) {
+            println!("Write config file error: {}", e);
+            exit(1)
+        }
         exit(0)
     }
 

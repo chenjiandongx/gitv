@@ -2,11 +2,11 @@ use crate::{config::AuthorMapping, Author, Repository};
 use anyhow::{anyhow, Result};
 use chrono::DateTime;
 use lazy_static::lazy_static;
-use std::process::Command;
 use std::{
     collections::HashMap,
     fs,
     path::Path,
+    process::Command,
     sync::{Arc, Mutex},
     time,
 };

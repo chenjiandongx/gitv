@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>commit-pyecharts-2019</title>
+    <script src="../assets/chart.min.js"></script>
+    <script src="../assets/chartjs-plugin-datalabels.js"></script>
+</head>
+
+<body>
+    <div><canvas id="commit-pyecharts-2019" width="680px" height="460px"></canvas></div>
+    <script>
+        Chart.register(ChartDataLabels)
+        const myChart = new Chart(
+            document.getElementById('commit-pyecharts-2019'),
+            {"type":"line","data":{"labels":[0,1,7,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],"datasets":[{"data":[10,2,2,7,6,6,8,5,10,3,6,9,12,6,2,1,7,16],"label":"commit count","fill":true,"borderColor":"pink","tension":0.2,"backgroundColor":"rgba(255, 192, 203, 0.4)"}]},"options":{"animation":{"duration":0},"plugins":{"title":{"display":true,"text":"2019 年 pyecharts 按小时提交数"},"datalabels":{"display":false}},"responsive":false}}
+    );
+    </script>
+</body>
+
+</html>

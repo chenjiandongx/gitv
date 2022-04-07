@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>commit-per-hour-2017</title>
+    <script src="../assets/chart.min.js"></script>
+    <script src="../assets/chartjs-plugin-datalabels.js"></script>
+</head>
+
+<body>
+    <div><canvas id="commit-per-hour-2017" width="680px" height="460px"></canvas></div>
+    <script>
+        Chart.register(ChartDataLabels)
+        const myChart = new Chart(
+            document.getElementById('commit-per-hour-2017'),
+            {"type":"bar","data":{"labels":[0,1,2,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],"datasets":[{"data":[55,35,9,1,9,30,43,23,28,48,21,42,37,64,30,27,56,72,63,72],"label":"count","backgroundColor":["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#e5c494","#b3b3b3"]}]},"options":{"animation":{"duration":0},"plugins":{"title":{"display":true,"text":"2017 年每天小时提交分布"},"datalabels":{"display":false}},"responsive":false}}
+    );
+    </script>
+</body>
+
+</html>

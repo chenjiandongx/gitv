@@ -1,0 +1,465 @@
+shell:
+  executions:
+    - dbName: "db"
+      dir: "../db"
+
+render:
+  executions:
+    - dbName: "db"
+      dir: "../db"
+
+  display:
+    destination: "./gitstats/static"
+    renderMode: "html"
+    dependency:
+      chartjs: "../assets/chart.min.js"
+      datalabels: "../assets/chartjs-plugin-datalabels.js"
+    queries:
+      - statements:
+          - "SELECT year(timestamp_rfc3339(a.first_commit)) AS year, count(a.repo_name) AS count FROM( SELECT repo_name, min(timestamp(datetime)) AS first_commit FROM 'db.commit' WHERE author_name = 'chenjiandongx' GROUP BY repo_name) AS a GROUP BY year ORDER BY year;"
+        chart:
+          name: "project-created-per-year"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "每年创建项目数量"
+              datalabels:
+                labels:
+            responsive: false
+          data:
+            labels:
+              - "${year}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "project count"
+                backgroundColor: "${PastelTwo}"
+
+      - statements:
+          - "SELECT year(datetime) AS year, count(1) AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) <= 2021 GROUP BY year ORDER BY year;"
+        chart:
+          name: "commit-total-per-year"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "每年提交数量"
+              datalabels:
+                labels:
+            responsive: false
+          data:
+            labels:
+              - "${year}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "commit count"
+                backgroundColor: "${PastelTwo}"
+
+      - statements:
+          - "SELECT year(datetime) AS year, count(1) / 365.0 AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) <= 2021 GROUP BY year ORDER BY year;"
+        chart:
+          name: "commit-count-per-year"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "每年每天平均提交数量"
+              datalabels:
+                formatter: ${formatter_percision}
+                labels:
+            responsive: false
+          data:
+            labels:
+              - "${year}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "commit count"
+                backgroundColor: "${PastelTwo}"
+
+      - statements:
+          - "SELECT year, count(DISTINCT(dateday)) AS count FROM( SELECT year(datetime) AS year, dateday(datetime) AS dateday FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) <= 2021) AS a GROUP BY year ORDER BY year;"
+        chart:
+          name: "commit-day-per-year"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "每年提交天数"
+              datalabels:
+                labels:
+            responsive: false
+          data:
+            labels:
+              - "${year}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "day count"
+                backgroundColor: "${PastelTwo}"
+
+      - statements:
+          - "SELECT year(datetime) AS year, count(1) AS count FROM 'db.tag' WHERE year(datetime) <= 2021 GROUP BY year ORDER BY year;"
+        chart:
+          name: "tag-per-year"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "每年 tag 构建数量"
+              datalabels:
+                labels:
+            responsive: false
+          data:
+            labels:
+              - "${year}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "tag count"
+                backgroundColor: "${PastelTwo}"
+
+      - statements:
+          - "SELECT HOUR(datetime) AS HOUR, count(1) as count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2017 GROUP BY HOUR ORDER BY HOUR;"
+        chart:
+          name: "commit-per-hour-2017"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2017 年每天小时提交分布"
+              datalabels:
+                display: false
+            responsive: false
+          data:
+            labels:
+              - "${hour}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "count"
+                backgroundColor: "${SetTwo}"
+
+      - statements:
+          - "SELECT ext, count(ext) AS count FROM( SELECT repo_name, ext, sum(insertion) AS insertion FROM 'db.change' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2018 AND ext IN ('py', 'js', 'go', 'html', 'css') GROUP BY repo_name, ext ORDER BY repo_name, insertion DESC) AS a GROUP BY ext ORDER BY count DESC;"
+        chart:
+          name: "change-language-2018"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            indexAxis: "y"
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2018 年项目语言分布"
+            responsive: false
+          data:
+            labels:
+              - "${ext}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "count"
+                borderRadius: 12
+                backgroundColor: "${PastelOne}"
+
+      - statements:
+          - "SELECT period(datetime) as period, count(1) as count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2018 GROUP BY period;"
+        chart:
+          name: "commit-period-2018"
+          type: "doughnut"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2018 年每天时段提交分布"
+              label:
+                display: false
+              datalabels:
+                formatter: ${formatter_percent}
+
+            responsive: false
+          data:
+            labels:
+              - "${period}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "count"
+                backgroundColor: "${PastelOne}"
+
+      - statements:
+          - "SELECT ext, count(ext) AS count FROM( SELECT repo_name, ext, sum(insertion) AS insertion FROM 'db.change' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2019 AND ext IN ('py', 'js', 'go', 'html', 'css') GROUP BY repo_name, ext ORDER BY repo_name, insertion DESC) AS a GROUP BY ext ORDER BY count DESC;"
+        chart:
+          name: "change-language-2019"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            indexAxis: "y"
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2019 年项目语言分布"
+            responsive: false
+          data:
+            labels:
+              - "${ext}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "count"
+                borderRadius: 12
+                backgroundColor: "${PastelOne}"
+
+      - statements:
+          - "SELECT period(datetime) as period, count(1) as count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2019 GROUP BY period;"
+        chart:
+          name: "commit-period-2019"
+          type: "polarArea"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2019 年每天时段提交分布"
+              datalabels:
+                formatter: ${formatter_percent}
+            responsive: false
+          data:
+            labels:
+              - "${period}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "count"
+                backgroundColor: "${PastelOneAlpha}"
+
+      - statements:
+          - "SELECT HOUR(datetime) AS HOUR, count(1) as count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND repo_name = 'pyecharts/pyecharts' AND year(datetime) = 2019 AND MONTH(datetime) IN(1, 2, 3, 4) GROUP BY HOUR ORDER BY HOUR;"
+        chart:
+          name: "commit-pyecharts-2019"
+          type: "line"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2019 年 pyecharts 按小时提交数"
+              datalabels:
+                display: false
+            responsive: false
+          data:
+            labels:
+              - "${hour}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "commit count"
+                fill: true
+                borderColor: "pink"
+                tension: 0.2
+                backgroundColor: "rgba(255, 192, 203, 0.4)"
+
+      - statements:
+          - "SELECT ext, count(ext) AS count FROM( SELECT repo_name, ext, sum(insertion) AS insertion FROM 'db.change' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2020 AND ext IN ('py', 'js', 'go', 'html', 'css') GROUP BY repo_name, ext ORDER BY repo_name, insertion DESC) AS a GROUP BY ext ORDER BY count DESC;"
+        chart:
+          name: "change-language-2020"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            indexAxis: "y"
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2020 年项目语言分布"
+            responsive: false
+          data:
+            labels:
+              - "${ext}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "count"
+                borderRadius: 12
+                backgroundColor: "${PastelOne}"
+
+      - statements:
+          - "SELECT weekday AS week, count FROM( SELECT weekday(datetime) AS weekday, weeknum(datetime) AS weeknum, count(1) AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2020 GROUP BY weeknum, weekday ORDER BY weeknum) AS a;"
+        chart:
+          name: "commit-week-2020"
+          type: "line"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2020 每周提交统计分布"
+              datalabels:
+                display: false
+            responsive: false
+          data:
+            labels:
+              - "${week}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "count"
+                backgroundColor: "${Purples}"
+
+      - statements:
+          - "SELECT HOUR, sum(count) AS count FROM( SELECT HOUR(datetime) AS HOUR, 0 AS count FROM 'db.commit' UNION SELECT HOUR(datetime) AS HOUR, count(1) AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2020 AND weeknum(datetime) NOT IN(5, 6) GROUP BY HOUR ORDER BY HOUR) AS a GROUP BY HOUR ORDER BY HOUR;"
+          - "SELECT HOUR, sum(count) AS count FROM( SELECT HOUR(datetime) AS HOUR, 0 AS count FROM 'db.commit' UNION SELECT HOUR(datetime) AS HOUR, count(1) AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2020 AND weeknum(datetime) IN(5, 6) GROUP BY HOUR ORDER BY HOUR) AS a GROUP BY HOUR ORDER BY HOUR;"
+        chart:
+          name: "commit-week-period-2020"
+          type: "line"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2020 每周提交统计分布"
+              datalabels:
+                display: false
+            responsive: false
+          data:
+            labels:
+              - "${hour}"
+            datasets:
+              - data:
+                  - "${0:count}"
+                label:
+                  - "工作日"
+                tension: 0.4
+                fill: true
+                borderColor: "#9FE2BF"
+                backgroundColor: "rgba(159,226,191,0.3)"
+              - data:
+                  - "${1:count}"
+                label:
+                  - "周末"
+                tension: 0.4
+                fill: true
+                borderColor: "#6495ED"
+                backgroundColor: "rgba(100,149,237,0.3)"
+
+      - statements:
+          - "SELECT MONTH(datetime) AS MONTH, count(1) AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2021 GROUP BY MONTH ORDER BY MONTH;"
+        chart:
+          name: "commit-month-2021"
+          type: "bar"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2022 每月提交统计分布"
+              datalabels:
+                display: false
+            responsive: false
+          data:
+            labels:
+              - "${month}"
+            datasets:
+              - data:
+                  - "${count}"
+                label: "commit count"
+                backgroundColor: "${PastelOneAlpha}"
+
+      - statements:
+          - "SELECT HOUR, sum(count) AS count FROM( SELECT HOUR(datetime) AS HOUR, 0 AS count FROM 'db.commit' UNION SELECT HOUR(datetime) AS HOUR, count(1) AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2021 AND weeknum(datetime) NOT IN(5, 6) GROUP BY HOUR ORDER BY HOUR) AS a GROUP BY HOUR ORDER BY HOUR;"
+          - "SELECT HOUR, sum(count) AS count FROM( SELECT HOUR(datetime) AS HOUR, 0 AS count FROM 'db.commit' UNION SELECT HOUR(datetime) AS HOUR, count(1) AS count FROM 'db.commit' WHERE author_name = 'chenjiandongx' AND year(datetime) = 2021 AND weeknum(datetime) IN(5, 6) GROUP BY HOUR ORDER BY HOUR) AS a GROUP BY HOUR ORDER BY HOUR;"
+        chart:
+          name: "commit-week-period-2021"
+          type: "line"
+          width: "680px"
+          height: "460px"
+          options:
+            animation:
+              duration: 0
+            plugins:
+              title:
+                display: true
+                text: "2021 每周提交统计分布"
+              datalabels:
+                display: false
+            responsive: false
+          data:
+            labels:
+              - "${hour}"
+            datasets:
+              - data:
+                  - "${0:count}"
+                label:
+                  - "工作日"
+                tension: 0.4
+                fill: true
+                borderColor: "#9FE2BF"
+                backgroundColor: "rgba(159,226,191,0.3)"
+              - data:
+                  - "${1:count}"
+                label:
+                  - "周末"
+                tension: 0.4
+                fill: true
+                borderColor: "#6495ED"
+                backgroundColor: "rgba(100,149,237,0.3)"

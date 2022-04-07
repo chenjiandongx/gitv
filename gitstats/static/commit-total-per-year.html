@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>commit-total-per-year</title>
+    <script src="../assets/chart.min.js"></script>
+    <script src="../assets/chartjs-plugin-datalabels.js"></script>
+</head>
+
+<body>
+    <div><canvas id="commit-total-per-year" width="680px" height="460px"></canvas></div>
+    <script>
+        Chart.register(ChartDataLabels)
+        const myChart = new Chart(
+            document.getElementById('commit-total-per-year'),
+            {"type":"bar","data":{"labels":[2017,2018,2019,2020,2021],"datasets":[{"data":[765,501,602,264,174],"label":"commit count","backgroundColor":["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9","#fff2ae","#f1e2cc","#cccccc"]}]},"options":{"animation":{"duration":0},"plugins":{"title":{"display":true,"text":"每年提交数量"},"datalabels":{"labels":null}},"responsive":false}}
+    );
+    </script>
+</body>
+
+</html>

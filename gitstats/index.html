@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>gitstats</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <meta name="description" content="Description">
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <link rel="stylesheet" href="./assets/vue.css">
+  <link rel="icon" href="favicon.ico">
+</head>
+<body>
+  <style type="text/css">
+    .markdown-section {
+        max-width: 70%;
+    }
+  </style>
+  <div id="app">Loading ...</div>
+  <script>
+    window.$docsify = {
+      name: 'gitstats',
+      repo: 'https://github.com/chenjiandongx/gitv',
+      autoHeader: true,
+      loadNavbar: true,
+      subMaxLevel: 2,
+      auto2top: true,
+      mergeNavbar: true,
+      homepage: 'gitstats.md',
+      ext: '.md',
+      plugins: [
+        function (hook) {
+          var footer = [
+            '<hr/>',
+            '<footer>',
+            '<span><a href="https://github.com/chenjiandongx/gitv">gitv</a> &copy;2022 - present.</span>',
+            '<span>Powered By <a href="https://github.com/QingWei-Li/docsify" target="_blank">docsify</a>.</span>',
+            '</footer>'
+          ].join('');
+
+          hook.afterEach(function (html) {
+            return html + footer
+          })
+        }
+      ],
+      copyCode: {
+        buttonText: {
+          '/': 'Click to Copy'
+        },
+        errorText: {
+          '/': 'Error'
+        },
+        successText: {
+          '/': 'Copy'
+        }
+      }
+    }
+  </script>
+  <script src="./assets/docsify-copy-code.min.js"></script>
+  <script src="./assets/docsify.js"></script>
+  <script src="./assets/zoom-image.js"></script>
+  <script src="./assets/prism-sql.js"></script>
+
+</body>
+</html>

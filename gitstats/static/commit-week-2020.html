@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>commit-week-2020</title>
+    <script src="../assets/chart.min.js"></script>
+    <script src="../assets/chartjs-plugin-datalabels.js"></script>
+</head>
+
+<body>
+    <div><canvas id="commit-week-2020" width="680px" height="460px"></canvas></div>
+    <script>
+        Chart.register(ChartDataLabels)
+        const myChart = new Chart(
+            document.getElementById('commit-week-2020'),
+            {"type":"line","data":{"labels":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],"datasets":[{"data":[41,49,40,38,24,30,42],"label":"count","backgroundColor":["#efedf5","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#54278f","#3f007d"]}]},"options":{"animation":{"duration":0},"plugins":{"title":{"display":true,"text":"2020 每周提交统计分布"},"datalabels":{"display":false}},"responsive":false}}
+    );
+    </script>
+</body>
+
+</html>

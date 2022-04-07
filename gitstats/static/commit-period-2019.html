@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>commit-period-2019</title>
+    <script src="../assets/chart.min.js"></script>
+    <script src="../assets/chartjs-plugin-datalabels.js"></script>
+</head>
+
+<body>
+    <div><canvas id="commit-period-2019" width="680px" height="460px"></canvas></div>
+    <script>
+        Chart.register(ChartDataLabels)
+        const myChart = new Chart(
+            document.getElementById('commit-period-2019'),
+            {"type":"polarArea","data":{"labels":["Evening","Afternoon","Morning","Midnight"],"datasets":[{"data":[137,252,88,125],"label":"count","backgroundColor":["rgba(251,180,174,0.8)","rgba(179,205,227,0.8)","rgba(204,235,197,0.8)","rgba(222,203,228,0.8)","rgba(254,217,166,0.8)","rgba(229,216,189,0.8)","rgba(253,218,236,0.8)","rgba(242,242,242,0.8)"]}]},"options":{"animation":{"duration":0},"plugins":{"title":{"display":true,"text":"2019 年每天时段提交分布"},"datalabels":{"formatter": function (value,context){var hiddens=context.chart._hiddenIndices;var total=0;var datapoints=context.dataset.data;datapoints.forEach((val,i)=>{if(hiddens[i]!=undefined){if(!hiddens[i]){total+=val}}else{total+=val}});var percentage=(value/total*100).toFixed(2)+'%';var out=context.chart.data.labels[context.dataIndex]+'\n'+percentage;return out}}},"responsive":false}}
+    );
+    </script>
+</body>
+
+</html>

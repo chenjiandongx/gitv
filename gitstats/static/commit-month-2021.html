@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>commit-month-2021</title>
+    <script src="../assets/chart.min.js"></script>
+    <script src="../assets/chartjs-plugin-datalabels.js"></script>
+</head>
+
+<body>
+    <div><canvas id="commit-month-2021" width="680px" height="460px"></canvas></div>
+    <script>
+        Chart.register(ChartDataLabels)
+        const myChart = new Chart(
+            document.getElementById('commit-month-2021'),
+            {"type":"bar","data":{"labels":[1,2,3,4,6,7,8,9,10,11,12],"datasets":[{"data":[9,4,4,1,37,17,18,4,9,59,12],"label":"commit count","backgroundColor":["rgba(251,180,174,0.8)","rgba(179,205,227,0.8)","rgba(204,235,197,0.8)","rgba(222,203,228,0.8)","rgba(254,217,166,0.8)","rgba(229,216,189,0.8)","rgba(253,218,236,0.8)","rgba(242,242,242,0.8)"]}]},"options":{"animation":{"duration":0},"plugins":{"title":{"display":true,"text":"2022 每月提交统计分布"},"datalabels":{"display":false}},"responsive":false}}
+    );
+    </script>
+</body>
+
+</html>

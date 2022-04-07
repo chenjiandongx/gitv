@@ -18,9 +18,4 @@ Cargo.lock
 .idea/
 .vscode/
 .DS_Store
-database/
 private.yaml
-*.png
-*.svg
-*.html
-gitstats/

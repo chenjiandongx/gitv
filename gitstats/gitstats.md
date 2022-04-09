@@ -1,6 +1,6 @@
 # 开源报告
 
-多年以后，面对着近百个 Github repo，我回想起那个第一次敲下 `git push origin master` 的下午。那时我的 Github 账号还是一片荒芜之地，没有 star 没有 fork 没有 follower。世界新生伊始，许多概念仍不清楚，提到的时候尚需要翻翻 Google。
+多年以后，面对着近百个 Github Repos，我回想起那个第一次敲下 `git push origin master` 的下午。那时我的 Github 账号还是一片荒芜之地，没有 Star 没有 Fork 没有 Follower。世界新生伊始，许多概念仍不清楚，提到的时候尚需要翻翻 Google。
 
 ## 短短这五年
 
@@ -161,7 +161,7 @@ ORDER BY
 
 <iframe width="680px" height="480px" style="border:none;" src="static/commit-day-per-year.html"></iframe>
 
-Tag 标识着项目版本的迭代，虽然不是每个项目都有 tag，但这也可以反映出项目的演进过程。
+Tag 标识着项目版本的迭代，虽然不是每个项目都有 tag，但这也 ~不一定~ 可以反映出项目的演进过程。
 
 <details>
 <summary>点击查看完整 SQL</summary>
@@ -239,7 +239,7 @@ Query OK, elapsed: 3.592829ms
 
 ## 2017: 你好世界
 
-在创建了第一个 repo 之后，2017 年后续也创建了多个 repo，其中包括我开发周期最长的项目 [pyecharts/pyecharts](https://github.com/pyecharts/pyecharts)，那是我的 **第 11 个项目**。一开始的项目基本都是使用 Python 写的，众所周知 Python 是世界上最好的语言（口误，是 PHP）。有个项目除外，[chenjiandongx/Qt](https://github.com/chenjiandongx/Qt) 使用 C++ 写的，写了个 **记事本** 和一个 **贪吃蛇** 小游戏。
+在创建了第一个 Repo 之后，2017 年后续也创建了多个 Repo，其中包括我开发周期最长的项目 [pyecharts/pyecharts](https://github.com/pyecharts/pyecharts)，那是我的 **第 11 个项目**。一开始的项目基本都是使用 Python 写的，众所周知 Python 是世界上最好的语言（口误，是 PHP）。有个项目除外，[chenjiandongx/Qt](https://github.com/chenjiandongx/Qt) 使用 C++ 写的，写了个 **记事本** 和一个 **贪吃蛇** 小游戏。
 
 <details>
 <summary>点击查看完整 SQL</summary>
@@ -515,7 +515,7 @@ Python 及其灵活的元类模式导致这个特性容易被滥用，很多开�
 
 ## 2018: 渐入佳境
 
-2018 年开始得到了一些关注，因为 pyecharts 项目开始有了一些热度，也开始享受这种正反馈的乐趣。在开发最热火朝天的那段日子，几乎每天都会收到 issue。有提问题的，有吐槽的，但 PR 却寥寥无几。但在开发 pyecharts 的时候，也陆陆续续开了很多新坑。也是从这时候开始接触了 Golang，那是另一段故事的开端。
+2018 年开始得到了一些关注，因为 pyecharts 项目开始有了一些热度，也开始享受合作开发的乐趣。在开发最热火朝天的那段日子，几乎每天都会收到 issue。有提问题的，有吐槽的，但 PR 却寥寥无几。但在开发 pyecharts 的时候，也陆陆续续开了很多新坑。也是从这时候开始接触了 Golang，那是另一段故事的开端。
 
 2018 年一共创建了 27 个开源项目。
 
@@ -585,7 +585,7 @@ Query OK, elapsed: 10.990047ms
 
 <div><img src="images/go-echarts-logo.png" width="38%"/></div>
 
-go-echarts 也曾登版 Github Trending，这个项目也重构过一次，具体详见 [go-echarts/issues/74](https://github.com/go-echarts/go-echarts/issues/74)，当时也是花费了我两个月的时间，不过最后立的 flag 没有倒，还是完成了。go-echarts 的代码就多一点了，有 6000 行。
+go-echarts 曾登版 Github Trending，这个项目也重构过一次，具体详见 [go-echarts/issues/74](https://github.com/go-echarts/go-echarts/issues/74)，当时也是花费了我两个月的时间，不过最后立的 flag 没有倒，还是完成了。go-echarts 的代码就多一点了，有 6000 行。
 
 <details>
 <summary>点击查看完整 SQL</summary>
@@ -681,7 +681,13 @@ GROUP BY
 
 ## 2019: 打工人
 
-2019 年，我毕业啦，身份从学生转变为打工人，曾经梦想仗剑走天涯，后来因为工作太忙没去成。这一年共创建 16 个项目。
+2019 年，我毕业啦，身份从学生转变为真正的打工人，曾经梦想仗剑走天涯，后来因为工作太忙没去成。再也没能像大学时期那么潇洒了
+
+* 起床看到睡晚了，卧槽，赶紧的，不要迟到了。
+* 起床看到下雨了，卧槽，赶紧的，不要迟到了。
+* ...
+
+这一年共创建 16 个项目。
 
 <details>
 <summary>点击查看完整 SQL</summary>
@@ -734,7 +740,7 @@ ORDER BY
 Query OK, elapsed: 11.258102ms
 ```
 
-Golang 项目的比例开始逐步增大了，已经有 9 个项目开始用 Golang 编写了，但第一仍旧是 Python。2019 年开始接触到 Kubernetes 这个云原生的概念，自己也开始动手捣鼓个小集群。也是在这一年，我买了人生第一台 Macbook Pro（没有实体 Esc）。
+Golang 项目的比例开始逐步增大了，已经有 9 个项目开始用 Golang 编写了，但第一仍旧是 Python。2019 年开始接触到 Kubernetes 这个云原生的概念，自己也开始动手捣鼓个小集群。也是在这一年，我买了人生第一台 Macbook Pro（没有实体 Esc，绝版）。
 
 <details>
 <summary>点击查看完整 SQL</summary>
@@ -852,7 +858,7 @@ WHERE
 Query OK, elapsed: 10.601985ms
 ```
 
-不熬夜怎么写代码（薅了薅头发）。
+不熬夜怎么写代码（薅了薅头发，又掉了几根）。
 
 <details>
 <summary>点击查看完整 SQL</summary>
@@ -925,8 +931,7 @@ ORDER BY
 Query OK, elapsed: 16.529302ms
 ```
 
-同年 11 月，pyecharts 宣布交由另外一个核心开发者维护。[来自 pyecharts 作者的一封通知函](https://github.com/pyecharts/pyecharts/issues/1402)，pyecharts 与我的故事就此画上了句号。
-
+同年 11 月，pyecharts 宣布交由另外一个核心开发者维护。[来自 pyecharts 作者的一封通知函](https://github.com/pyecharts/pyecharts/issues/1402)。
 
 ## 2020: 新航道
 
@@ -934,7 +939,7 @@ Query OK, elapsed: 16.529302ms
 
 另外 2020 年也参与了另外一个开源的监控项目 [didi/nightingale](https://github.com/didi/nightingale)，贡献了一些 PR 并成为了其 committer，不过遗憾的是后续就没有再深度参与进去了，毕竟公司内部没有使用其产品或者组件。**没有生产验证和踩坑也很难贡献高质量的 PR。**
 
-在这 2020 年创建的 14 个项目里面，`pinger` 和 `tszlist` 最终被用于公司的**生产环境**上。前者是一个 PING 工具库，后者是一种时序数据线程安全链表。
+在这 2020 年创建的 14 个项目里面，`pinger` 和 `tszlist` 最终被用于公司的 **生产环境** 上。前者是一个 PING 工具库，后者是一种时序数据线程安全链表。
 
 <details>
 <summary>点击查看完整 SQL</summary>
@@ -1067,7 +1072,7 @@ LIMIT
 Query OK, elapsed: 18.657274ms
 ```
 
-其中 [chenjiandongx/kubectl-images](https://github.com/chenjiandongx/kubectl-images) 是一个 kubectl 的命令行插件，插件已归档到 [kubernetes-sigs/krew](https://github.com/kubernetes-sigs/krew)，并且 `krew` 的作者还给我这个项目发过 PR。插件可以通过 `kubectl krew install` 安装。
+其中 [chenjiandongx/kubectl-images](https://github.com/chenjiandongx/kubectl-images) 是一个 `kubectl` 的命令行插件，插件已归档到 [kubernetes-sigs/krew](https://github.com/kubernetes-sigs/krew)，并且 `krew` 的作者还给我这个项目发过 PR。插件可以通过 `kubectl krew install` 安装。
 
 ```shell
 $ kubectl krew install images
@@ -1361,7 +1366,7 @@ ORDER BY
 
 <iframe width="680px" height="480px" style="border:none;" src="static/commit-week-period-2021.html"></iframe>
 
-2021 年总体的项目数量和提交量都大幅度减少，但是还是有不少收获。mandodb 登上了 Github Trending，而 sniffer 则是顺利加入到 homebrew 中。这两个项目从构思到完成差不多都花了三个月，这期间也一直在学习，比如研究 [prometheus]() 源码启发灵感。读 [bandwhich](https://github.com/imsnif/bandwhich) 和 [nethogs](https://github.com/raboof/nethogs) 代码来弄明白如何进行网络流量嗅探。
+2021 年总体的项目数量和提交量都大幅度减少，但是还是有收获。mandodb 登上了 Github Trending，而 sniffer 则是顺利加入到 homebrew 中。这两个项目从构思到完成差不多都花了三个月，这期间也一直在学习，比如研究 [prometheus](https://github.com/prometheus) 源码启发灵感。读 [bandwhich](https://github.com/imsnif/bandwhich) 和 [nethogs](https://github.com/raboof/nethogs) 代码来弄明白如何进行网络流量嗅探。
 
 在读 bandwhcih 源码的时候，也开始温习 rust，之前陆陆续续有看过 rust 相关的文档和书籍，但一直都没有完整地写过一个 rust 项目。正好写这份报告需要用到一个 git 记录指标采集工具，就干脆用 rust 实现了。
 
@@ -1562,20 +1567,26 @@ Query OK, elapsed: 13.331184ms
 
 人始终都是要朝前看，过去的成绩已被归档，未来的产出才值得期待。stars 不是也不应该成为我们开源的唯一追求，但 stars 作为一种正反馈可以推动我们持续开源。
 
-**开源一个项目不难，持续维护和迭代一个开源项目才难。**我们可能经常会在 Github 上遇到自己依赖的第三方库已经多年没更新，issue 也无人问津，然后就吐槽作者弃坑的情况。那问题来了，开源项目的作者是不是应该永远对自己代码负责？是否有义务解决每一个 issue？是否应该快速响应每一个 PR？不好说。
+从上面的分析结论来看，我确实花费了不少的时间在参与开源上，特别是晚上，熬夜写代码成为了家常便饭（可持续性地竭泽而渔）。为什么喜欢在熬夜写？因为白天确实没有时间... 
 
-这里推荐大家阅读一下这篇博客 [Taking an indefinite sabbatical from my projects](https://arslan.io/2018/10/09/taking-an-indefinite-sabbatical-from-my-projects/)。
+**开源一个项目不难，持续维护和迭代一个开源项目才难。**我们可能经常会遇到自己依赖的第三方库已经多年没更新，issue 也无人问津，然后就吐槽作者弃坑的情况。那问题来了，开源项目的作者是不是应该永远对自己代码负责？是否有义务解决每一个 issue？是否应该快速响应每一个 PR？不好说。
+
+这里推荐大家阅读一下这篇博客 [Taking an indefinite sabbatical from my projects](https://arslan.io/2018/10/09/taking-an-indefinite-sabbatical-from-my-projects/)。作者分享了对维护开源项目的一些看法。
 
 > Working on a side project is fun until it becomes your second full-time job.
 
-毋庸置疑，大家都在用自己的热情在 Github 上发光发热。我是一个热爱技术的人，所以期待有更多的 **中国开发者或者中国互联网公司** 开发出面向世界的产品，比如 [TiDB](https://github.com/pingcap/tidb)，又比如 [vuejs](https://github.com/vuejs/vue)。去创造价值，提高影响力，而不是创造流量，吸引眼球 -> [denoland/deno/issues/25](https://github.com/denoland/deno/issues/25) / [vuejs/vue/issues/10616](https://github.com/vuejs/vue/issues/10616)
+开源不可能乌托邦，不可能脱离国家和政治因素存在，Github/Gitlab 作为美国公司同样也要受到美国法律的管控。虽然技术离不开政治，但是在开源社区，至少还有开源的行为规范，我们应该尽力遵守行为规范，共同维护和谐交流的社区。无论是在技术上还是政治觉悟上，要努力提升自己，不随大流，不被当枪使，不要人云亦云，要自己独立思考。 
 
-从上面的分析结论来看，我确实花费了不少的时间在参与开源上，特别是晚上，熬夜写代码成为了家常便饭（可持续性地竭泽而渔）。为什么喜欢在熬夜写？因为白天确实没有时间... 
+**法律有国界、政治有立场、开源无歧视。**
 
-到现在偶尔我还是会收到一些感谢信，说我的项目在工作上或者学习上帮助到了他。**这是一种非常棒的体验**，因为我写的东西或多或少在某些领域解决了某些问题。但也有人是直接把需求发我邮件让我帮忙实现（黑人问号脸），也遇到有人问我如何 **快速地** 在 Github 上得到一波 stars（上淘宝？）。
+毋庸置疑，大家都在用自己的热情在开源社区上发光发热。我是一个热爱技术的人，所以期待有更多的 **中国开发者或者中国互联网公司** 开发出面向世界的产品，比如 [TiDB](https://github.com/pingcap/tidb)，又比如 [vuejs](https://github.com/vuejs/vue)。去创造价值，提高影响力，而不是创造流量，吸引眼球 -> [denoland/deno/issues/25](https://github.com/denoland/deno/issues/25) / [vuejs/vue/issues/10616](https://github.com/vuejs/vue/issues/10616)。美国向这个世界贡献了那么多好的技术、理念、文化，因此才能成为世界的领导者。而中国如果想要崛起，想要成为多极世界中的一极，同样需要贡献足够多的「礼物」。
 
-总之，我很庆幸，在这个风起云涌，瞬息万变的社会里，我始终能保持对代码的好奇心，保持探索编程世界的欲望，不被功利裹挟。
+到现在偶尔我还是会收到一些感谢信，说我的项目在工作上或者学习上帮助到了他。**这是一种非常棒的体验**，因为我写的东西或多或少解决了某些问题。但也有人是直接把需求发我邮件让我帮忙实现（黑人问号脸），也遇到有人问我如何 **快速地** 在 Github 上得到一波 stars（上淘宝？）。
+
+总之，我很庆幸，在这个风起云涌，瞬息万变的社会里，我始终能保持对代码的好奇心，保持探索编程世界的欲望，不被功利裹挟。怕什么真理无穷，进一寸有一寸的欢喜。
 
 写有趣的代码，成为有趣的人。
+
+最后，天下苦疫情久已，希望疫情赶紧消失。中国加油！上海加油！
 
 以上。

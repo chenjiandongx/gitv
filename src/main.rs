@@ -16,7 +16,8 @@ use record::*;
 use std::{fs::File, io::Write, process::exit};
 
 #[derive(Debug, Parser)]
-#[clap(version, about, long_about = None)]
+#[clap(about = "\nA git repos analyzing and visualizing tool built in Rust.")]
+#[clap(version)]
 struct Cli {
     /// Retrieve repos and create new databases
     #[clap(short, long)]
@@ -34,7 +35,7 @@ struct Cli {
     #[clap(short, long)]
     shell: bool,
 
-    /// Generate a default config file (default: gitv.default.yaml)
+    /// Generate the example config file (default: gitv.example.yaml)
     #[clap(short, long)]
     gernerate: bool,
 
@@ -42,7 +43,7 @@ struct Cli {
     path: Option<String>,
 }
 
-static DEFAULT_CONFIG: &str = include_str!("../static/gitv.default.yaml");
+static DEFAULT_CONFIG: &str = include_str!("../static/gitv.example.yaml");
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -53,7 +54,7 @@ async fn main() -> Result<()> {
     }
 
     if cli.gernerate {
-        let p = &cli.path.unwrap_or_else(|| "gitv.default.yaml".to_string());
+        let p = &cli.path.unwrap_or_else(|| "gitv.example.yaml".to_string());
         let mut f = match File::create(p) {
             Err(e) => {
                 println!("Create config file error: {}", e);

@@ -4,74 +4,86 @@ create:
   disablePull: false
   #
   # （可选项）作者映射关系，因为可能出现同个作者使用了不同的名称或者账号
-  authorMappings:
+  # authorMappings:
   #   - source:
   #       name: "dingdongx"
   #       email: "chenjiandongx@qq.com"
   #     destination:
   #       name: "chenjiandongx"
   #       email: "chenjiandongx@qq.com"
-
+  #
   # 数据库信息
   databases:
     - dir: "./db" # 数据将存放到路径，需自己提前创建好
+      # 最终扫描的仓库是 files + repos 的 merge 结果
+      # 如若只想扫描本地的某几个仓库，可以使用直接指定 repos 的方式
+      # 如若想扫描 Github 账号下的仓库，则推荐使用 `fetch` 命令生成的仓库文件
       #
-      # 最终扫描的仓库是 files + repos 的 merge 结果，如若只想扫描本地的某几个仓库，可以使用直接指定 repos 的方式
-      # 若是想扫描 Github 账号下的仓库，则推荐使用 `fetch` 命令生成的文件
       #（可选项）仓库列表文件，由 `fetch` 命令创建，文件内容同 `repos` 属性
-      files:
-        # - "./db/dongdongx.yaml"
+      # files:
+      #   - "./db/repos.yaml"
+      #
       #（可选项）仓库列表
-      repos:
-        # - name: "chenjiandongx/gitv"
-        #   branch: "master"  # 扫描的分支
-        #   path: "~/src/github.com/chenjiandongx/gitv"
-        #   remote: "https://github.com/chenjiandongx/gitv"
+      # repos:
+      #   - name: "chenjiandongx/gitv"
+      #     branch: "master"  # 扫描的分支
+      #     path: "~/src/github.com/chenjiandongx/gitv"
+      #     remote: "https://github.com/chenjiandongx/gitv"
 
 # fetch: 拉取 Github 仓库元数据列表
 # 目前支持 githubAuthenticated、githubUser、githubOrg，按需填写
 fetch:
   # https://docs.github.com/en/rest/reference/repos#list-repositories-for-the-authenticated-user
+  # 拉取 Token 本身账户的仓库列表，可以拉取到 private 仓库
   githubAuthenticated:
     - cloneDir: "./db" # 项目 clone 路径
       destination: "./db/repos.yaml"  # repos 列表文件生成路径
       token: "${YOUR_GITHUB_TOKEN}"   # Github Token
+      #
       #（可选项）排除某些 orgs
-      excludeOrgs:
-        # - "some_orgs"
+      # excludeOrgs:
+      #   - "some_orgs"
+      #
       #（可选项）排除某些项目
-      excludeRepos:
-        # - "some_repos"
+      # excludeRepos:
+      #   - "some_repos"
+      #
       visibility: "owner"
       affiliation: "owner,organization_member"
 
   # https://docs.github.com/en/rest/reference/repos#list-repositories-for-a-user
+  # 拉取某个 Github 用户的仓库列表
   githubUser:
     - cloneDir: "./db"
       destination: "./db/repos-${user}.yaml"
-      username: "${someone-you-known}"
+      username: "chenjiandongx" # 拉取的用户名
       token: "${YOUR_GITHUB_TOKEN}"
+      #
       #（可选项）排除某些项目
-      excludeRepos:
-        # - "some_repos"
+      # excludeRepos:
+      #   - "some_repos"
+      #
       type: "owner"
 
   # https://docs.github.com/en/rest/reference/repos#list-organization-repositories
+  # 拉取某个 Github Org 的仓库列表
   githubOrg:
     - cloneDir: "./db"
       destination: "./db/repos-${org}.yaml"
       token: "${YOUR_GITHUB_TOKEN}"
+      #
       #（可选项）排除某些项目
-      excludeRepos:
-        # - "some_repos"
-      org: "pyecharts"
+      # excludeRepos:
+      #   - "some_repos"
+      #
+      org: "pyecharts"  # 拉取的仓库名
       type: ""
 
 # shell: 创建 shell 环境并加载数据
 shell:
   executions:
-    - dbName: "db"
-      dir: "./db"
+    - dbName: "db"  # 数据库名称
+      dir: "./db"   # 数据文件所在目录
 
 # render: 渲染图表
 render:
@@ -79,25 +91,23 @@ render:
     - dbName: "db"
       dir: "./db"
 
-  # 自定义颜色列表
-  colors: 
-    # Blues: ["#deebf7", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#08306b"]
-  
-  # 自定义 js 函数，使用 `{{% %}}` 包裹起来
-  functions:
-    # my_function_name: "{{% function (value,context){return Math.round(value*100)/100} %}}"
+  #（可选项）自定义颜色列表
+  # colors: 
+  #   Blues: ["#deebf7", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#08306b"]
+  #
+  #（可选项）自定义 js 函数，使用 `{{% %}}` 包裹起来
+  # functions:
+  #   my_function_name: "{{% function (value,context){return Math.round(value*100)/100} %}}"
 
   display:
     destination: "./gitstats/static"  # 图表生成路径
     renderMode: "html"  # 渲染格式，有 html/table 可选
-    # （可选项）依赖资源文件，默认
-    # - chartjs: "https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js"
-    # - datalabels: "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"
-    # 也可以指定为本地依赖
-    dependency:
-      # chartjs: "../assets/chart.min.js"
-      # datalabels: "../assets/chartjs-plugin-datalabels.js"
-
+    #
+    # （可选项）依赖资源文件，也可以指定为本地依赖
+    # dependency:
+    #   chartjs: "https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.1/chart.min.js"
+    #   datalabels: "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"
+    #
     # 执行查询语句和图表生成样式
     queries:
       - statements: # sql 语句
@@ -121,9 +131,9 @@ render:
             responsive: false
           data:
             labels:
-              - "${repo_name}" # ${field} -> field 会被替换成 sql 中的同名字段
+              - "${repo_name}" # ${field} -> field 会被替换成 sql 中的同名字段数据
             datasets:
               - data:
-                  - "${stars}" # ${field} -> field 会被替换成 sql 中的同名字段
+                  - "${stars}" # ${field} -> field 会被替换成 sql 中的同名字段数据
                 label: "project count"
-                backgroundColor: "${PastelTwo}" # 替换 colors.yaml 中定义的颜色列表
+                backgroundColor: "${Blues}" # 替换 colors 中定义的颜色列表

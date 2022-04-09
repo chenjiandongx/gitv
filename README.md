@@ -2,14 +2,21 @@
 
 gitv 是一个由 Rust 编写的 git 仓库分析和可视化的命令行工具。
 
-## 特性
+![](https://user-images.githubusercontent.com/19553554/162578481-1df8ee5b-42c4-4a11-b0b9-690f702f922d.png)
 
-* 支持读取远程仓库和本地仓库。
-* 支持 yaml 声明式配置，用户友好。
-* 支持 SQL 查询，并提供额外的自定义函数，依赖 [arrow-datafusion](https://github.com/apache/arrow-datafusion) 执行引擎。
-* 支持 SQL 查询结果可视化数据，依赖 [chartjs](https://www.chartjs.org/)。
+## 💡 Design
 
-## 安装
+在参与开源的第五个年头，想看看这些年来自己的成长变化，因此需要一个工具来辅助我分析我的代码记录。我希望这个工具拥有以下特性
+
+1. 依赖轻量：gitv 不依赖任何外部组件，仅一个二进制执行文件。
+2. 查询灵活：gitv 使用 [arrow-datafusion](https://github.com/apache/arrow-datafusion) 执行引擎进行 SQL 查询，并提供了内置的自定义函数。
+3. 用户友好：gitv 使用 yaml 作为其配置格式，并提供了 `-g` flag 快速生成一个配置文件模板。
+4. 数据通用：gitv 使用 csv 作为数据文件存储格式，允许用户使用任何其他熟悉的工具来进行数据分析（Pandas, Excel, Tableau...）
+5. 集成 Github：gitv 提供了多个 Github Repos 拉取接口，无须手动指定每个仓库信息。
+6. 可视化：gitv 使用了 [chartjs](https://www.chartjs.org/) 作为可视化依赖，且支持常用图表的所有配置项。
+7. MUST Rust!
+
+## 🔰 Installation
 
 **Cargo 安装**
 
@@ -21,7 +28,7 @@ $ cargo install gitv
 
 // TODO
 
-## 使用
+## 🔖 Usages
 
 命令帮助文档：
 
@@ -137,7 +144,7 @@ chenjiandongx/kubectl-images,16,154
 | author_domain | 邮箱域名            | qq.com                                   |
 
 ```csv
-❯ 🤷 cat commit.csv | head
+❯ 🐶 cat commit.csv | head
 repo_name,hash,branch,datetime,author_name,author_email,author_domain
 chenjiandongx/Github-spider,5c1e21ff11b0b0d819de09f689f077be1cdd6416,master,2017-05-07T21:23:26+08:00,chenjiandongx,chenjiandongx@qq.com,qq.com
 chenjiandongx/Github-spider,309121d6f41c8817cdd8189834834009af452f09,master,2017-05-04T00:25:38+08:00,chenjiandongx,chenjiandongx@qq.com,qq.com
@@ -298,11 +305,11 @@ Query OK, elapsed: 2.156542ms
 
 ### Render Action
 
- Render 负责根据配置执行 SQL 语句并渲染 chartjs 图表。
+Render 负责根据配置执行 SQL 语句并渲染 chartjs 图表。
  
- **配置内容：**
- ```yaml
- render:
+**配置内容：**
+```yaml
+render:
   executions:
     - dbName: "db"
       dir: "./db"
@@ -353,8 +360,15 @@ Query OK, elapsed: 2.156542ms
                   - "${stars}" # ${field} -> field 会被替换成 sql 中的同名字段数据
                 label: "project count"
                 backgroundColor: "${Blues}" # 替换 colors 中定义的颜色列表
- ```
+```
 
 除了可使用自己定义的颜色列表和函数列表，也可以使用 gitv 提供的内置颜色和函数。
+
 * 颜色列表：[colors.yaml](./static/colors.yaml)
 * 函数列表：[functions.yaml](./static/functions.yaml)
+
+更多使用示例请参考 [./gitstats](./gitstats/) 目录或访问 [gitstats.chenjandongx.me](https://gitstats.chenjiandongx.me)
+
+## 📋 License
+
+MIT [©chenjiandongx](https://github.com/chenjiandongx)

@@ -208,8 +208,9 @@ impl CsvSerializer {
         repo: &Repository,
         author_mappings: Vec<AuthorMapping>,
     ) -> Result<()> {
+        const MAX_COMMITS: usize = 10000;
         let hashs = GitImpl::commits_hash(repo)?;
-        if hashs.len() > 5000 {
+        if hashs.len() > MAX_COMMITS {
             Self::serialize_commits_sectional(tx, repo, author_mappings, hashs).await?
         } else {
             let commits = GitImpl::commits(repo, &author_mappings, "")?;

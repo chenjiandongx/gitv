@@ -1,0 +1,25 @@
+---
+- name: go-echarts/go-echarts-assets
+  branch: master
+  remote: "https://github.com/go-echarts/go-echarts-assets.git"
+  path: "./go-echarts/go-echarts-assets"
+  forks_count: 11
+  stargazers_count: 9
+- name: go-echarts/go-echarts
+  branch: master
+  remote: "https://github.com/go-echarts/go-echarts.git"
+  path: "./go-echarts/go-echarts"
+  forks_count: 433
+  stargazers_count: 4537
+- name: go-echarts/examples
+  branch: master
+  remote: "https://github.com/go-echarts/examples.git"
+  path: "./go-echarts/examples"
+  forks_count: 33
+  stargazers_count: 70
+- name: go-echarts/statsview
+  branch: master
+  remote: "https://github.com/go-echarts/statsview.git"
+  path: "./go-echarts/statsview"
+  forks_count: 41
+  stargazers_count: 474

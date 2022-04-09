@@ -1,0 +1,32 @@
+fetch:
+  githubOrg:
+    - cloneDir: "."
+      destination: "go-echarts.yaml"
+      token: "MY-PRIVATE-TOKEN"
+      org: "go-echarts"
+      type: ""
+
+create:
+  authorMappings:
+    - source:
+        name: "dongdongx"
+        email: "chenjiandongx@qq.com"
+      destination:
+        name: "chenjiandongx"
+        email: "chenjiandongx@qq.com"
+    - source:
+        name: "chenjiandong"
+        email: "chenjiandongx@qq.com"
+      destination:
+        name: "chenjiandongx"
+        email: "chenjiandongx@qq.com"
+
+  databases:
+    - dir: "."
+      files:
+        - "go-echarts.yaml"
+
+shell:
+  executions:
+    - dbName: "db"
+      dir: "."

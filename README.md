@@ -28,7 +28,7 @@ $ cargo install gitv
 
 **预编译二进制**
 
-// TODO
+* [gitv/releases](https://github.com/chenjiandongx/gitv/releases)
 
 ## 🔖 Usages
 

@@ -3,6 +3,7 @@ authors = ["chenjiandongx <chenjiandongx@qq.com>"]
 edition = "2021"
 homepage = "https://github.com/chenjiandongx/gitv"
 keywords = ["git", "visualization", "stats", "analyze", "tool"]
+desciption = "A git repos analyzing and visualizing tool built in Rust."
 license = "MIT/Apache-2.0"
 name = "gitv"
 readme = "README.md"

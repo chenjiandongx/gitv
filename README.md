@@ -1,5 +1,8 @@
 # gitv
 
+[![Version info](https://img.shields.io/crates/v/gitv.svg)](https://crates.io/crates/gitv)
+[![Version info](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
+
 gitv 是一个由 Rust 编写的 git 仓库分析和可视化的命令行工具。
 
 ![](https://user-images.githubusercontent.com/19553554/162578481-1df8ee5b-42c4-4a11-b0b9-690f702f922d.png)

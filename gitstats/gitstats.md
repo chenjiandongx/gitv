@@ -1,4 +1,4 @@
-# 开源报告
+# 我的开源报告
 
 多年以后，面对着近百个 Github Repos，我回想起那个第一次敲下 `git push origin master` 的下午。那时我的 Github 账号还是一片荒芜之地，没有 Star 没有 Fork 没有 Follower。世界新生伊始，许多概念仍不清楚，提到的时候尚需要翻翻 Google。
 
@@ -439,40 +439,7 @@ Query OK, elapsed: 11.527755ms
 
 **1）富有表达力**
 
-python 的语法糖能让我们以简洁的代码完成功能。比如列表表达式
-```python
-# 列表表达式
-lst = [ x for x in range(10) if x % 2 == 0]
-# 生成器表达式
-lst = ( x for x in range(10) if x % 2 == 0)
-```
-
-天然兼容 JSON 格式
-```python
-j = {"who": "chenjiandongx"}
-j["who"]
-```
-
-直接生成二维数组
-```python
-listOfFives = [[5]] *5
-```
-
-从元祖构造字典
-```python
-names = ["fandi", "hasan", "umar"]
-colors = ["red", "green", "blue"]
-d = dict(zip(names, colors))
-```
-
-简便的内置函数，大多数情况下都不用关心数据类型。
-```python
-any([...])
-all([...])
-sort([...])
-reversed([...])
-...
-```
+python 的语法糖能和实用的函数让我们以简洁的代码完成功能，比如一行代码实现树结构，[One-line Tree in Python](https://gist.github.com/hrldcpr/2012250)。
 
 **2）数据分析**
 
@@ -1194,6 +1161,30 @@ ORDER BY
 <iframe width="680px" height="480px" style="border:none;" src="static/commit-week-period-2020.html"></iframe>
 
 工作日的凌晨 12 点到 1 点还可以理解，2 点钟到 3 点钟居然也有接近 10 个提交，第二天不用上班的吗？也可能是那时候年轻，体力好（应该是的）。工作日的早上 9 点到下午 15 点是提交高峰期，这应该是在写公司用到的开源项目，如上面提到的 `pinger` 和 `tszlist`，并且 12 点到 14 点是中午休息时间。
+
+接下来聊聊 Golang。
+
+**Golang 的优势**
+
+**1）简洁**
+
+Golang 的语法和关键字给人一种惜字如金的感觉，非常地克制。但也是这种简洁，让学习曲线非常平滑，`gofmt` 也在代码格式化上一统天下，工具链用起来舒服。
+
+**2）并发**
+
+Golang 天然支持并发，`go` 关键字让开发者以近乎同步的代码异步地运行，`Goroutine` 和 `Channel` 在手，并发我有。且得益于高效的调度模型和 GC 系统，Golang 的 STW 的时间已经变得极短。在非极致的性能要求，如实时系统，IO 敏感的场景下，开发者并不需要关心如何进行调度调优。
+
+**3）部署方便**
+
+在没有 Cgo 代码依赖，Golang 可以非常轻松地进行交叉编译，这种特性无论对交付还是测试开发是很实用的。
+
+**4）云原生**
+
+新时代的操作系统 Kubernetes 就是 Golang 编写的，所以众多的云原生组件都偏好于使用 Golang。在云原生领域，Golang 已经是绝对的霸主地位。[CNCF Projects](https://www.cncf.io/projects/)。
+
+**Golang 的劣势**
+
+暂无特别明显的劣势，用作主力开发语言还是蛮舒服的。
 
 ## 2021: 厚积薄发
 

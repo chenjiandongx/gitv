@@ -14,7 +14,7 @@ gitv 是一个由 Rust 编写的 git 仓库分析和可视化的命令行工具�
 4. 数据通用：gitv 使用 csv 作为数据文件存储格式，允许用户使用任何其他熟悉的工具来进行数据分析（Pandas, Excel, Tableau...）
 5. 集成 Github：gitv 提供了多个 Github Repos 拉取接口，无须手动指定每个仓库信息。
 6. 可视化：gitv 使用了 [chartjs](https://www.chartjs.org/) 作为可视化依赖，且支持常用图表的所有配置项。
-7. Rust!
+7. **Rust!**
 
 👉 [《我的开源报告》](https://gitstats.chenjiandongx.me) -- by dongdongx
 

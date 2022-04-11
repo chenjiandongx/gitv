@@ -1,1 +1,2 @@
-gitstats/assets/* linguist-vendored=false
+gitstats/assets/* linguist-language=rust
+gitstats/static/* linguist-language=rust

@@ -31,7 +31,12 @@ $ cargo install gitv
 
 **预编译二进制**
 
-* [gitv/releases](https://github.com/chenjiandongx/gitv/releases)
+```shell
+# Refer to the link: https://github.com/chenjiandongx/gitv/releases
+# Download the binary and then...
+$ chmod +x gitv_${os_arch} && mv gitv_${os_arch} /usr/local/bin/
+$ gitv --help
+```
 
 ## 🔖 Usages
 
@@ -373,6 +378,17 @@ render:
 * 函数列表：[functions.yaml](./static/functions.yaml)
 
 更多使用示例请参考 [./gitstats](./gitstats/) 目录或访问 [gitstats.chenjandongx.me](https://gitstats.chenjiandongx.me)
+
+## 🚀 Performance
+
+以几个大型的开源项目来做测试，耗时如下：
+
+| 项目                                                | commit 数量 | 分析耗时       |
+| --------------------------------------------------- | ----------- | -------------- |
+| [python/cpython](https://github.com/python/cpython) | 11w         | 35.946570246s  |
+| [rust-lang/rust](https://github.com/rust-lang/rust) | 16w         | 40.847021043s  |
+| [golang/go](https://github.com/golang/go)           | 5w          | 15.669395742s  |
+| [torvalds/linux](https://github.com/torvalds/linux) | 108w        | 317.717217195s |
 
 ## 📋 License
 
